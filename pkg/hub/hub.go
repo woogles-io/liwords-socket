@@ -3,12 +3,11 @@ package sockets
 import (
 	"context"
 	"errors"
-	"sync"
 
-	"github.com/domino14/liwords/pkg/config"
-	"github.com/domino14/liwords/pkg/entity"
-	"github.com/domino14/liwords/pkg/gameplay"
-	pb "github.com/domino14/liwords/rpc/api/proto"
+	// "github.com/domino14/liwords/pkg/config"
+	// "github.com/domino14/liwords/pkg/entity"
+	// "github.com/domino14/liwords/pkg/gameplay"
+	// pb "github.com/domino14/liwords/rpc/api/proto"
 	"github.com/rs/zerolog/log"
 )
 
@@ -27,11 +26,11 @@ type RealmMessage struct {
 // clients.
 type Hub struct {
 	// Registered clients.
-	clients           map[*Client]bool
-	clientsByUsername map[string][]*Client
+	clients           map[*Client]map[Realm]bool
+	clientsByUsername map[string]map[*Client]bool
 
 	// Inbound messages from the clients.
-	broadcast chan []byte
+	// broadcast chan []byte
 
 	// Register requests from the clients.
 	register chan *Client
@@ -39,93 +38,133 @@ type Hub struct {
 	// Unregister requests from clients.
 	unregister chan *Client
 
-	gameStore       gameplay.GameStore
-	soughtGameStore gameplay.SoughtGameStore
-	config          *config.Config
+	// Topics (i.e. realms)
 
-	realmMutex sync.Mutex
+	// gameStore       gameplay.GameStore
+	// soughtGameStore gameplay.SoughtGameStore
+	// config          *config.Config
+
+	// realmMutex sync.Mutex
 	// Each realm has a list of clients in it.
 	realms map[Realm]map[*Client]bool
 
-	broadcastRealm chan RealmMessage
+	// broadcastRealm chan RealmMessage
 
-	eventChan chan *entity.EventWrapper
+	// eventChan chan *entity.EventWrapper
 }
 
 func NewHub(gameStore gameplay.GameStore, soughtGameStore gameplay.SoughtGameStore,
 	cfg *config.Config) *Hub {
 	return &Hub{
-		broadcast:         make(chan []byte),
-		broadcastRealm:    make(chan RealmMessage),
+		// broadcast:         make(chan []byte),
+		// broadcastRealm:    make(chan RealmMessage),
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
-		clients:           make(map[*Client]bool),
-		clientsByUsername: make(map[string][]*Client),
+		clients:           make(map[*Client]map[Realm]bool),
+		clientsByUsername: make(map[string]map[*Client]bool),
 		realms:            make(map[Realm]map[*Client]bool),
 		// eventChan should be buffered to keep the game logic itself
 		// as fast as possible.
-		eventChan:       make(chan *entity.EventWrapper, 50),
-		gameStore:       gameStore,
-		soughtGameStore: soughtGameStore,
-		config:          cfg,
+		// eventChan:       make(chan *entity.EventWrapper, 50),
+		// gameStore:       gameStore,
+		// soughtGameStore: soughtGameStore,
+		// config:          cfg,
 	}
 }
 
-func (h *Hub) removeClient(c *Client) {
+func (h *Hub) removeClient(c *Client) error {
 	// no need to protect with mutex, only called from
 	// single-threaded Run
 	log.Debug().Str("client", c.username).Msg("removing client")
 	close(c.send)
-	delete(h.clients, c)
-	delete(h.clientsByUsername, c.username)
-	for realm := range c.realms {
+
+	for realm := range h.clients[c] {
 		delete(h.realms[realm], c)
+		if len(h.realms[realm] == 0) {
+			delete(h.realms, realm)
+			err := h.subconn.Unsubscribe(t)
+			if err != nil {
+				return err
+			}
+		}
 	}
+
+	delete(h.clients, c)
+	if (len(h.clientsByUsername[c.username])) == 1 {
+		delete(h.clientsByUsername, c.username)
+		return nil
+	}
+	// Otherwise, delete just one of the sockets.
+	log.Debug().Msg("multiple-connections-del-one")
+	delete(h.clientsByUsername[c.username], c)
+	return nil
 }
 
-func (h *Hub) addClient(client *Client) {
+func (h *Hub) addClient(client *Client, realm Realm) error {
 	// no need to protect with mutex, only called from
 	// single-threaded Run
-	h.clients[client] = true
+	h.clients[client] = make(map[Realm]bool)
+	h.clients[client][realm] = true
 	byUser := h.clientsByUsername[client.username]
 
 	if byUser == nil {
-		h.clientsByUsername[client.username] = []*Client{client}
+		h.clientsByUsername[client.username] = make(map[*Client]bool)
 	} else {
-		h.clientsByUsername[client.username] = append(byUser, client)
+		h.clientsByUsername[client.username][client] = true
 	}
+
+	, ok :=h.realms[realm]
+	if !ok {
+		h.realms[realm] = make(map[*Client]bool)
+		err := h.subconn.Subscribe(realm)
+		if err != nil {
+			return err
+		}
+	}
+	h.realms[realm][client] = true
+
+	return nil
 }
 
 func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
-			h.addClient(client)
+			// Add every client to the "global" realm no matter what.
+			// We can use this for notifications like private messages, etc.
+			err := h.addClient(client, Realm("global"))
+			if err != nil {
+				log.Err(err).Msg("error-adding-client")
+			}
 
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
-				h.removeClient(client)
-			}
-		case message := <-h.broadcast:
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				default:
-					h.removeClient(client)
+				err := h.removeClient(client)
+				if err != nil {
+					log.Err(err).Msg("error-adding-client")
 				}
+			} else {
+				log.Error().Msg("unregistered-but-not-in-map")
 			}
+		// case message := <-h.broadcast:
+		// 	for client := range h.clients {
+		// 		select {
+		// 		case client.send <- message:
+		// 		default:
+		// 			h.removeClient(client)
+		// 		}
+		// 	}
 
-		case message := <-h.broadcastRealm:
-			log.Debug().Str("realm", string(message.realm)).
-				Msg("sending broadcast message to realm")
-			for client := range h.realms[message.realm] {
-				select {
-				case client.send <- message.msg:
-				default:
-					h.removeClient(client)
-				}
-			}
-
+		// case message := <-h.broadcastRealm:
+		// 	log.Debug().Str("realm", string(message.realm)).
+		// 		Msg("sending broadcast message to realm")
+		// 	for client := range h.realms[message.realm] {
+		// 		select {
+		// 		case client.send <- message.msg:
+		// 		default:
+		// 			h.removeClient(client)
+		// 		}
+		// 	}
 		}
 	}
 }
@@ -133,31 +172,31 @@ func (h *Hub) Run() {
 // RunGameEventHandler runs a separate loop that just handles game events,
 // and forwards them to the appropriate sockets. All other events, like chat,
 // should be handled in the Run function (I think, subject to change).
-func (h *Hub) RunGameEventHandler() {
-	for {
-		select {
-		case w := <-h.eventChan:
-			realm := Realm(w.GameID())
-			err := h.sendToRealm(realm, w)
-			if err != nil {
-				log.Err(err).Str("realm", string(realm)).Msg("sending to realm")
-			}
-			n := len(h.eventChan)
-			// Also send any backed up events to the appropriate realms.
-			if n > 0 {
-				log.Info().Int("backpressure", n).Msg("game event channel")
-			}
-			for i := 0; i < n; i++ {
-				w := <-h.eventChan
-				err := h.sendToRealm(realm, w)
-				if err != nil {
-					log.Err(err).Str("realm", string(realm)).Msg("sending to realm")
-				}
-			}
+// func (h *Hub) RunGameEventHandler() {
+// 	for {
+// 		select {
+// 		case w := <-h.eventChan:
+// 			realm := Realm(w.GameID())
+// 			err := h.sendToRealm(realm, w)
+// 			if err != nil {
+// 				log.Err(err).Str("realm", string(realm)).Msg("sending to realm")
+// 			}
+// 			n := len(h.eventChan)
+// 			// Also send any backed up events to the appropriate realms.
+// 			if n > 0 {
+// 				log.Info().Int("backpressure", n).Msg("game event channel")
+// 			}
+// 			for i := 0; i < n; i++ {
+// 				w := <-h.eventChan
+// 				err := h.sendToRealm(realm, w)
+// 				if err != nil {
+// 					log.Err(err).Str("realm", string(realm)).Msg("sending to realm")
+// 				}
+// 			}
 
-		}
-	}
-}
+// 		}
+// 	}
+// }
 
 // since addNewRealm can be called from different goroutines, we must protect
 // the realm map.
@@ -286,28 +325,28 @@ func (h *Hub) sendRealmData(ctx context.Context, realm Realm, username string) {
 
 }
 
-// Not sure where else to put this
-func (h *Hub) openSeeks(ctx context.Context) ([]byte, error) {
-	sgs, err := h.soughtGameStore.ListOpen(ctx)
-	if err != nil {
-		return nil, err
-	}
+// // Not sure where else to put this
+// func (h *Hub) openSeeks(ctx context.Context) ([]byte, error) {
+// 	sgs, err := h.soughtGameStore.ListOpen(ctx)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	pbobj := &pb.SeekRequests{Requests: []*pb.SeekRequest{}}
-	for _, sg := range sgs {
-		pbobj.Requests = append(pbobj.Requests, sg.SeekRequest)
-	}
-	evt := entity.WrapEvent(pbobj, pb.MessageType_SEEK_REQUESTS, "")
-	return evt.Serialize()
-}
+// 	pbobj := &pb.SeekRequests{Requests: []*pb.SeekRequest{}}
+// 	for _, sg := range sgs {
+// 		pbobj.Requests = append(pbobj.Requests, sg.SeekRequest)
+// 	}
+// 	evt := entity.WrapEvent(pbobj, pb.MessageType_SEEK_REQUESTS, "")
+// 	return evt.Serialize()
+// }
 
-func (h *Hub) gameRefresher(ctx context.Context, realm Realm, username string) ([]byte, error) {
-	// Assume the realm is a game ID. We can expand this later.
-	entGame, err := h.gameStore.Get(ctx, string(realm))
-	if err != nil {
-		return nil, err
-	}
-	evt := entity.WrapEvent(entGame.HistoryRefresherEvent(),
-		pb.MessageType_GAME_HISTORY_REFRESHER, entGame.GameID())
-	return evt.Serialize()
-}
+// func (h *Hub) gameRefresher(ctx context.Context, realm Realm, username string) ([]byte, error) {
+// 	// Assume the realm is a game ID. We can expand this later.
+// 	entGame, err := h.gameStore.Get(ctx, string(realm))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	evt := entity.WrapEvent(entGame.HistoryRefresherEvent(),
+// 		pb.MessageType_GAME_HISTORY_REFRESHER, entGame.GameID())
+// 	return evt.Serialize()
+// }

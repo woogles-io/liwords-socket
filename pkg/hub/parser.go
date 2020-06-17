@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/domino14/liwords/pkg/entity"
-	"github.com/domino14/liwords/pkg/gameplay"
+	// "github.com/domino14/liwords/pkg/entity"
+	// "github.com/domino14/liwords/pkg/gameplay"
 	pb "github.com/domino14/liwords/rpc/api/proto"
 	macondopb "github.com/domino14/macondo/gen/api/proto/macondo"
 	"github.com/rs/zerolog/log"

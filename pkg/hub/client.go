@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/domino14/liwords/pkg/entity"
+	// "github.com/domino14/liwords/pkg/entity"
 
 	pb "github.com/domino14/liwords/rpc/api/proto"
 	"github.com/rs/zerolog/log"
@@ -59,8 +59,6 @@ type Client struct {
 	send chan []byte
 
 	username string
-
-	realms map[Realm]bool
 }
 
 func (c *Client) sendError(err error) {
