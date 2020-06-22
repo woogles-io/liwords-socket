@@ -4,100 +4,62 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"time"
 
-	// "github.com/domino14/liwords/pkg/entity"
-	// "github.com/domino14/liwords/pkg/gameplay"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/domino14/liwords/pkg/entity"
 	pb "github.com/domino14/liwords/rpc/api/proto"
-	macondopb "github.com/domino14/macondo/gen/api/proto/macondo"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
-func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, sender string) error {
+const (
+	ipcTimeout = 2 * time.Second
+)
+
+func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client) error {
 	// All socket messages are encoded entity.Events.
 	// (or they better be)
 
-	ew, err := entity.EventFromByteArray(msg)
-	if err != nil {
-		return err
-	}
-	switch ew.Type {
-	case pb.MessageType_SEEK_REQUEST:
-		evt, ok := ew.Event.(*pb.SeekRequest)
-		if !ok {
-			return errors.New("sr unexpected typing error")
+	switch pb.MessageType(msg[0]) {
+	case pb.MessageType_TOKEN_SOCKET_LOGIN:
+		ew, err := entity.EventFromByteArray(msg)
+		if err != nil {
+			return err
 		}
-		sg, err := gameplay.NewSoughtGame(ctx, h.soughtGameStore, evt)
+		evt, ok := ew.Event.(*pb.TokenSocketLogin)
+		if !ok {
+			return errors.New("unexpected socket login typing error")
+		}
+		return socketLogin(c, evt)
+
+	case pb.MessageType_SEEK_REQUEST:
+		err := h.pubsub.natsconn.Publish("ipc.pb.seekRequest", msg[1:])
 		if err != nil {
 			return err
 		}
 
-		h.NewSeekRequest(sg.SeekRequest)
+		// sg, err := NewSoughtGame(ctx, h.soughtGameStore, evt)
+		// if err != nil {
+		// 	return err
+		// }
+
+	// 	h.NewSeekRequest(sg.SeekRequest)
 
 	case pb.MessageType_GAME_ACCEPTED_EVENT:
-		evt, ok := ew.Event.(*pb.GameAcceptedEvent)
-		if !ok {
-			return errors.New("gae unexpected typing error")
-		}
-
-		sg, err := h.soughtGameStore.Get(ctx, evt.RequestId)
-		if err != nil {
-			return err
-		}
-		requester := sg.SeekRequest.User.Username
-		if requester == sender {
-			log.Info().Str("sender", sender).Msg("canceling seek")
-			err := gameplay.CancelSoughtGame(ctx, h.soughtGameStore, evt.RequestId)
-			if err != nil {
-				return err
-			}
-			// broadcast a seek deletion.
-			err = h.DeleteSeek(evt.RequestId)
-			if err != nil {
-				return err
-			}
-			return err
-		}
-
-		players := []*macondopb.PlayerInfo{
-			{Nickname: sender, RealName: sender},
-			{Nickname: requester, RealName: requester},
-		}
-		log.Debug().Interface("seekreq", sg.SeekRequest).Msg("seek-request-accepted")
-
-		g, err := gameplay.InstantiateNewGame(ctx, h.gameStore, h.config,
-			players, sg.SeekRequest.GameRequest)
-		if err != nil {
-			return err
-		}
-		// Broadcast a seek delete event, and send both parties a game redirect.
-		h.soughtGameStore.Delete(ctx, evt.RequestId)
-		err = h.DeleteSeek(evt.RequestId)
-		if err != nil {
-			return err
-		}
-		// This event will result in a redirect.
-		ngevt := entity.WrapEvent(&pb.NewGameEvent{
-			GameId: g.GameID(),
-		}, pb.MessageType_NEW_GAME_EVENT, "")
-
-		h.sendToClient(sender, ngevt)
-		h.sendToClient(requester, ngevt)
-		// Create a new realm to put these players in.
-		realm := h.addNewRealm(g.GameID())
-		h.addToRealm(realm, sender)
-		h.addToRealm(realm, requester)
-		log.Info().Str("newgameid", g.History().Uid).
-			Str("sender", sender).
-			Str("requester", requester).
-			Str("onturn", g.NickOnTurn()).Msg("game-accepted")
-
-		// Now, reset the timer and register the event change hook.
-		err = gameplay.StartGame(ctx, h.gameStore, h.eventChan, g.GameID())
+		err := h.pubsub.natsconn.Publish("ipc.pb.gameAccepted", msg[1:])
 		if err != nil {
 			return err
 		}
 
 	case pb.MessageType_CLIENT_GAMEPLAY_EVENT:
+		err := h.pubsub.natsconn.Publish("ipc.pb.gameplayEvent", msg[1:])
+		if err != nil {
+			return err
+		}
+
+		/* client gameplay event
 		evt, ok := ew.Event.(*pb.ClientGameplayEvent)
 		if !ok {
 			// This really shouldn't happen
@@ -107,39 +69,178 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, sender str
 		if err != nil {
 			return err
 		}
+		*/
 
-	case pb.MessageType_REGISTER_REALM:
-		evt, ok := ew.Event.(*pb.RegisterRealm)
+		// seek request accepted:
+	// 	sg, err := h.soughtGameStore.Get(ctx, evt.RequestId)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	requester := sg.SeekRequest.User.Username
+	// 	if requester == sender {
+	// 		log.Info().Str("sender", sender).Msg("canceling seek")
+	// 		err := gameplay.CancelSoughtGame(ctx, h.soughtGameStore, evt.RequestId)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		// broadcast a seek deletion.
+	// 		err = h.DeleteSeek(evt.RequestId)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		return err
+	// 	}
+
+	// 	players := []*macondopb.PlayerInfo{
+	// 		{Nickname: sender, RealName: sender},
+	// 		{Nickname: requester, RealName: requester},
+	// 	}
+	// 	log.Debug().Interface("seekreq", sg.SeekRequest).Msg("seek-request-accepted")
+
+	// 	g, err := gameplay.InstantiateNewGame(ctx, h.gameStore, h.config,
+	// 		players, sg.SeekRequest.GameRequest)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	// Broadcast a seek delete event, and send both parties a game redirect.
+	// 	h.soughtGameStore.Delete(ctx, evt.RequestId)
+	// 	err = h.DeleteSeek(evt.RequestId)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	// This event will result in a redirect.
+	// 	ngevt := entity.WrapEvent(&pb.NewGameEvent{
+	// 		GameId: g.GameID(),
+	// 	}, pb.MessageType_NEW_GAME_EVENT, "")
+
+	// 	h.sendToClient(sender, ngevt)
+	// 	h.sendToClient(requester, ngevt)
+	// 	// Create a new realm to put these players in.
+	// 	realm := h.addNewRealm(g.GameID())
+	// 	h.addToRealm(realm, sender)
+	// 	h.addToRealm(realm, requester)
+	// 	log.Info().Str("newgameid", g.History().Uid).
+	// 		Str("sender", sender).
+	// 		Str("requester", requester).
+	// 		Str("onturn", g.NickOnTurn()).Msg("game-accepted")
+
+	// 	// Now, reset the timer and register the event change hook.
+	// 	err = gameplay.StartGame(ctx, h.gameStore, h.eventChan, g.GameID())
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// case pb.MessageType_CLIENT_GAMEPLAY_EVENT:
+	// 	evt, ok := ew.Event.(*pb.ClientGameplayEvent)
+	// 	if !ok {
+	// 		// This really shouldn't happen
+	// 		return errors.New("cge unexpected typing error")
+	// 	}
+	// 	err := gameplay.PlayMove(ctx, h.gameStore, sender, evt)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	case pb.MessageType_JOIN_PATH:
+		ew, err := entity.EventFromByteArray(msg)
+		if err != nil {
+			return err
+		}
+		evt, ok := ew.Event.(*pb.JoinPath)
 		if !ok {
 			// This really shouldn't happen
 			return errors.New("rr unexpected typing error")
 		}
-		h.addToRealm(Realm(evt.Realm), sender)
-		h.sendRealmData(ctx, Realm(evt.Realm), sender)
+		return registerRealm(c, evt, h)
 
-	case pb.MessageType_DEREGISTER_REALM:
-		evt, ok := ew.Event.(*pb.DeregisterRealm)
-		if !ok {
-			// This really shouldn't happen
-			return errors.New("dr unexpected typing error")
-		}
-		h.removeFromRealm(Realm(evt.Realm), sender)
+	case pb.MessageType_UNJOIN_REALM:
+		h.removeFromRealm(c)
 
-	case pb.MessageType_TIMED_OUT:
-		evt, ok := ew.Event.(*pb.TimedOut)
-		if !ok {
-			return errors.New("to unexpected typing error")
-		}
-		// Verify the timeout.
-		err := gameplay.TimedOut(ctx, h.gameStore, sender, evt.Username, evt.GameId)
-		if err != nil {
-			return err
-		}
+	// case pb.MessageType_TIMED_OUT:
+	// 	evt, ok := ew.Event.(*pb.TimedOut)
+	// 	if !ok {
+	// 		return errors.New("to unexpected typing error")
+	// 	}
+	// 	// Verify the timeout.
+	// 	err := gameplay.TimedOut(ctx, h.gameStore, sender, evt.Username, evt.GameId)
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
 	default:
-		return fmt.Errorf("message type %v not yet handled", ew.Type)
+		return fmt.Errorf("message type %v not yet handled", msg[0])
 
 	}
 
 	return nil
+}
+
+func socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
+	tokenString := evt.Token
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+
+		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+		return []byte(os.Getenv("SECRET_KEY")), nil
+	})
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		// XXX: CHEKC THAT IT HASN'T EXPIRED. I think Valid ^^ might be enough but we need a test.
+
+		// fmt.Println(claims["foo"], claims["nbf"])
+		c.authenticated = true
+		c.username = claims["unn"].(string)
+		c.userID = claims["uid"].(string)
+		log.Debug().Str("username", c.username).Str("userID", c.userID).Msg("authenticated socket connection")
+	}
+	return err
+}
+
+func registerRealm(c *Client, evt *pb.JoinPath, h *Hub) error {
+	// There are a variety of possible realms that a person joining a game
+	// can be in. We should not trust the user to send the right realm
+	// (for example they can send a TV mode realm if they're a player
+	// in the game or vice versa). The backend should determine the right realm
+	// and assign it accordingly.
+
+	var realm string
+	if evt.Path == "/" {
+		// This is the lobby; no need to request a realm.
+		h.addToRealm(LobbyRealm, c)
+		realm = string(LobbyRealm)
+	} else {
+		// First, create a request and send to the IPC api:
+		rrr := &pb.RegisterRealmRequest{}
+		rrr.Realm = evt.Path
+		rrr.UserId = c.userID
+		data, err := proto.Marshal(rrr)
+		if err != nil {
+			return err
+		}
+		resp, err := h.pubsub.natsconn.Request("ipc.request.registerRealm", data, ipcTimeout)
+		if err != nil {
+			return err
+		}
+		// The response contains the correct realm for the user.
+		var rrResp *pb.RegisterRealmResponse
+		err = proto.Unmarshal(resp.Data, rrResp)
+		if err != nil {
+			return err
+		}
+		realm = rrResp.Realm
+		// Only add to the realm that the API says to add to.
+		h.addToRealm(Realm(realm), c)
+	}
+	// Meow, depending on the realm, request that the API publish
+	// initial information pertaining to this realm. For example,
+	// lobby visitors will want to see a list of sought games,
+	// or newcomers to a game realm will want to see the history
+	// of the game so far.
+	err := h.pubsub.natsconn.Publish("ipc.nonpb.initRealmInfo."+realm, []byte(c.userID))
+	return err
+	// The API will publish the initial realm information to this user's channel.
+	// (user.userID - see pubsub.go)
 }

@@ -3,9 +3,13 @@ module github.com/domino14/liwords-socket
 go 1.14
 
 require (
-	github.com/domino14/liwords v0.0.0-20200616050503-8f293ea2e15f
-	github.com/domino14/macondo v0.4.5-0.20200614205704-f23b8af3878f
-	github.com/gomodule/redigo v1.8.2 // indirect
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/domino14/liwords v0.0.0-20200622030338-365ece6d9788
 	github.com/gorilla/websocket v1.4.2
+	github.com/lithammer/shortuuid v3.0.0+incompatible
+	github.com/namsral/flag v1.7.4-pre
+	github.com/nats-io/nats-server/v2 v2.1.7 // indirect
+	github.com/nats-io/nats.go v1.10.0
 	github.com/rs/zerolog v1.19.0
+	google.golang.org/protobuf v1.24.0
 )

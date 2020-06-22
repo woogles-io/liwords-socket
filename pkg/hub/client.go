@@ -4,23 +4,16 @@ package sockets
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/hex"
-	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
-	"os"
-	"strconv"
 	"time"
 
 	// "github.com/domino14/liwords/pkg/entity"
-
-	pb "github.com/domino14/liwords/rpc/api/proto"
+	"github.com/gorilla/websocket"
+	"github.com/lithammer/shortuuid"
 	"github.com/rs/zerolog/log"
 
-	"github.com/gorilla/websocket"
+	"github.com/domino14/liwords/pkg/entity"
+	pb "github.com/domino14/liwords/rpc/api/proto"
 )
 
 const (
@@ -58,7 +51,21 @@ type Client struct {
 	// Buffered channel of outbound messages.
 	send chan []byte
 
-	username string
+	authenticated bool
+	username      string
+	// userID is the user database ID, and it should contain solely of base57
+	// chars, so we should use it as much as possible.
+	userID string
+	// It makes things much easier if a client socket is only allowed to be in one
+	// single "realm" at a time. A realm is an abstract thing that is akin
+	// to a "chatroom". Some example realms:
+	// - lobby
+	// - game-gameid-player   -- A realm just for the two players of a game.
+	// - game-gameid-observer -- A realm for observers of a game.
+	// - tourney-tourneyid -- A realm for a tourney "room", with its own chat room and standings
+	// If you want to join multiple realms, use multiple tabs (although, that's not a use
+	// case we necessarily want to encourage)
+	realm Realm
 }
 
 func (c *Client) sendError(err error) {
@@ -86,6 +93,7 @@ func (c *Client) readPump() {
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
+		// _, message, err
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -96,7 +104,8 @@ func (c *Client) readPump() {
 
 		// Here is where we parse the message and send something off to the hub
 		// potentially.
-		err = c.hub.parseAndExecuteMessage(context.Background(), message, c.username)
+
+		err = c.hub.parseAndExecuteMessage(context.Background(), message, c)
 		if err != nil {
 			log.Err(err).Str("username", c.username).Msg("parse-and-execute-message")
 			c.sendError(err)
@@ -170,50 +179,7 @@ func closeMessage(ws *websocket.Conn, errStr string) {
 	return
 }
 
-func validateWsRequest(v url.Values, now int64) error {
-	secretKey := os.Getenv("SECRET_KEY")
-	user := v.Get("user")
-	timestamp := v.Get("expire")
-	token := v.Get("_token")
-	// Convert token to an array of bytes. Assume token is hex encoded.
-
-	if secretKey == "" {
-		// This should be a panic but let's not go overboard.
-		// Maybe it's a too many open files issue.
-		return errors.New("no secret key in environment")
-	}
-	// Convert timestamp to an int.
-	tsInt, err := strconv.Atoi(timestamp)
-	if err != nil {
-		return err
-	}
-	if int64(tsInt) < now {
-		return fmt.Errorf("your token has expired (ts = %v, now = %v)",
-			tsInt, now)
-	}
-	if user == "" {
-		return fmt.Errorf("no user was specified")
-	}
-	tokenHex, err := hex.DecodeString(token)
-	if err != nil {
-		return err
-	}
-
-	// Reconstruct signed string.
-	ss := fmt.Sprintf("expire=%v&user=%v", timestamp, user)
-	log.Debug().Str("tosign", ss).Msg("signing")
-	mac := hmac.New(sha1.New, []byte(secretKey))
-	mac.Write([]byte(ss))
-	expectedMac := mac.Sum(nil)
-	if !hmac.Equal(expectedMac, tokenHex) {
-		return fmt.Errorf(
-			"token signature was not correct (got %x, expected %x)",
-			expectedMac, tokenHex)
-	}
-	return nil
-}
-
-// serveWs handles websocket requests from the peer.
+// ServeWS handles websocket requests from the peer.
 func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -221,30 +187,19 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qvals := r.URL.Query()
-	// XXX: figure out validation later
-	// err = validateWsRequest(qvals, time.Now().Unix())
-	// if err != nil {
-	// 	log.Err(err).Msg("validating websocket")
-	// 	return
-	// }
-	// initialRealm := qvals.Get("realm")
-
 	client := &Client{
 		hub:      hub,
 		conn:     conn,
-		username: qvals.Get("user"),
+		userID:   shortuuid.New(),
+		username: "Anonymous",
 		send:     make(chan []byte, 256),
-		realms:   make(map[Realm]bool),
 	}
-	// log.Info().Str("user", client.username).Str("initRealm", initialRealm).
-	// 	Msg("new connection")
-	// client.realms[Realm(initialRealm)] = true
+	log.Info().Msg("new anonymous client")
+
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
-	// client.sendInitialData()
 }
