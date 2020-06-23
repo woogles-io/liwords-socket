@@ -18,6 +18,22 @@ const (
 	ipcTimeout = 2 * time.Second
 )
 
+func extendTopic(c *Client, topic string) string {
+	// The publish topic should encode the user ID and the login status.
+	// This is so we don't have to wastefully unmarshal and remarshal here,
+	// and also because NATS plays nicely with hierarchical subject names.
+	first := ""
+	second := ""
+	if !c.authenticated {
+		first = "anon"
+	} else {
+		first = "auth"
+	}
+	second = c.userID
+
+	return topic + "." + first + "." + second
+}
+
 func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client) error {
 	// All socket messages are encoded entity.Events.
 	// (or they better be)
@@ -32,29 +48,23 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 		if !ok {
 			return errors.New("unexpected socket login typing error")
 		}
-		return socketLogin(c, evt)
+		return h.socketLogin(c, evt)
 
 	case pb.MessageType_SEEK_REQUEST:
-		err := h.pubsub.natsconn.Publish("ipc.pb.seekRequest", msg[1:])
+		log.Debug().Msg("publishing seek request to NATS")
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.seekRequest"), msg[1:])
 		if err != nil {
 			return err
 		}
 
-		// sg, err := NewSoughtGame(ctx, h.soughtGameStore, evt)
-		// if err != nil {
-		// 	return err
-		// }
-
-	// 	h.NewSeekRequest(sg.SeekRequest)
-
 	case pb.MessageType_GAME_ACCEPTED_EVENT:
-		err := h.pubsub.natsconn.Publish("ipc.pb.gameAccepted", msg[1:])
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameAccepted"), msg[1:])
 		if err != nil {
 			return err
 		}
 
 	case pb.MessageType_CLIENT_GAMEPLAY_EVENT:
-		err := h.pubsub.natsconn.Publish("ipc.pb.gameplayEvent", msg[1:])
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameplayEvent"), msg[1:])
 		if err != nil {
 			return err
 		}
@@ -175,7 +185,7 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 	return nil
 }
 
-func socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
+func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 	tokenString := evt.Token
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -195,6 +205,14 @@ func socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 		c.username = claims["unn"].(string)
 		c.userID = claims["uid"].(string)
 		log.Debug().Str("username", c.username).Str("userID", c.userID).Msg("authenticated socket connection")
+		if c.realm != NullRealm {
+			log.Debug().Str("realm", string(c.realm)).Str("username", c.username).
+				Msg("client already in realm, sending init info")
+			err = h.sendRealmInitInfo(string(c.realm), c.username)
+		}
+	}
+	if err != nil {
+		log.Err(err).Msg("socket-login-failure")
 	}
 	return err
 }
@@ -205,7 +223,7 @@ func registerRealm(c *Client, evt *pb.JoinPath, h *Hub) error {
 	// (for example they can send a TV mode realm if they're a player
 	// in the game or vice versa). The backend should determine the right realm
 	// and assign it accordingly.
-
+	log.Debug().Str("path", evt.Path).Msg("register-realm-path")
 	var realm string
 	if evt.Path == "/" {
 		// This is the lobby; no need to request a realm.
@@ -224,23 +242,39 @@ func registerRealm(c *Client, evt *pb.JoinPath, h *Hub) error {
 		if err != nil {
 			return err
 		}
+		log.Debug().Msg("got response from registerRealmReq")
 		// The response contains the correct realm for the user.
-		var rrResp *pb.RegisterRealmResponse
+		rrResp := &pb.RegisterRealmResponse{}
 		err = proto.Unmarshal(resp.Data, rrResp)
 		if err != nil {
 			return err
 		}
 		realm = rrResp.Realm
-		// Only add to the realm that the API says to add to.
-		h.addToRealm(Realm(realm), c)
+		if Realm(realm) != NullRealm {
+			// Only add to the realm that the API says to add to.
+			h.addToRealm(Realm(realm), c)
+		}
 	}
 	// Meow, depending on the realm, request that the API publish
 	// initial information pertaining to this realm. For example,
 	// lobby visitors will want to see a list of sought games,
 	// or newcomers to a game realm will want to see the history
 	// of the game so far.
-	err := h.pubsub.natsconn.Publish("ipc.nonpb.initRealmInfo."+realm, []byte(c.userID))
-	return err
+	return h.sendRealmInitInfo(realm, c.userID)
 	// The API will publish the initial realm information to this user's channel.
 	// (user.userID - see pubsub.go)
+}
+
+func (h *Hub) sendRealmInitInfo(realm string, userID string) error {
+	req := &pb.InitRealmInfo{
+		Realm:  realm,
+		UserId: userID,
+	}
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
+
+	return h.pubsub.natsconn.Publish("ipc.pb.initRealmInfo", data)
 }

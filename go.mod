@@ -4,11 +4,10 @@ go 1.14
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/domino14/liwords v0.0.0-20200622030338-365ece6d9788
+	github.com/domino14/liwords v0.0.0-20200623042747-46e37db256cc
 	github.com/gorilla/websocket v1.4.2
 	github.com/lithammer/shortuuid v3.0.0+incompatible
 	github.com/namsral/flag v1.7.4-pre
-	github.com/nats-io/nats-server/v2 v2.1.7 // indirect
 	github.com/nats-io/nats.go v1.10.0
 	github.com/rs/zerolog v1.19.0
 	google.golang.org/protobuf v1.24.0
