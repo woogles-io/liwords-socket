@@ -203,12 +203,22 @@ func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 		// fmt.Println(claims["foo"], claims["nbf"])
 		c.authenticated = true
 		c.username = claims["unn"].(string)
+		h.realmMutex.Lock()
+		// Delete the old user ID from the map
+		delete(h.clientsByUserID, c.userID)
 		c.userID = claims["uid"].(string)
+		byUser := h.clientsByUserID[c.userID]
+		if byUser == nil {
+			h.clientsByUserID[c.userID] = make(map[*Client]bool)
+		}
+		// Add the new user ID to the map.
+		h.clientsByUserID[c.userID][c] = true
+		h.realmMutex.Unlock()
 		log.Debug().Str("username", c.username).Str("userID", c.userID).Msg("authenticated socket connection")
 		if c.realm != NullRealm {
 			log.Debug().Str("realm", string(c.realm)).Str("username", c.username).
 				Msg("client already in realm, sending init info")
-			err = h.sendRealmInitInfo(string(c.realm), c.username)
+			err = h.sendRealmInitInfo(string(c.realm), c.userID)
 		}
 	}
 	if err != nil {

@@ -103,19 +103,32 @@ func (h *Hub) removeClient(c *Client) error {
 	close(c.send)
 
 	realm := h.clients[c]
+	if c.realm != realm {
+		log.Error().Str("realm", string(realm)).Str("c.realm", string(c.realm)).
+			Msg("client realm doesn't match")
+	}
 
 	delete(h.realms[realm], c)
+	log.Debug().Msgf("deleted client from realm %v. New length %v", realm, len(
+		h.realms[realm]))
+
 	if len(h.realms[realm]) == 0 {
 		delete(h.realms, realm)
 	}
 
 	delete(h.clients, c)
+	log.Debug().Msgf("deleted client from clients. New length %v", len(
+		h.clients))
+
 	if (len(h.clientsByUserID[c.userID])) == 1 {
 		delete(h.clientsByUserID, c.userID)
+		log.Debug().Msgf("deleted client from clientsbyuserid. New length %v", len(
+			h.clientsByUserID))
 		return nil
 	}
 	// Otherwise, delete just one of the sockets.
-	log.Debug().Msg("multiple-connections-del-one")
+	log.Debug().Interface("userid", c.userID).Int("numconn", len(h.clientsByUserID[c.userID])).
+		Msg("non-one-num-conns")
 	delete(h.clientsByUserID[c.userID], c)
 	return nil
 }
@@ -148,7 +161,7 @@ func (h *Hub) Run() {
 			if _, ok := h.clients[client]; ok {
 				err := h.removeClient(client)
 				if err != nil {
-					log.Err(err).Msg("error-adding-client")
+					log.Err(err).Msg("error-removing-client")
 				}
 			} else {
 				log.Error().Msg("unregistered-but-not-in-map")
@@ -164,6 +177,7 @@ func (h *Hub) Run() {
 
 		case message := <-h.broadcastRealm:
 			log.Debug().Str("realm", string(message.realm)).
+				Int("clients", len(h.realms[message.realm])).
 				Msg("sending broadcast message to realm")
 			for client := range h.realms[message.realm] {
 				select {
@@ -218,12 +232,33 @@ func (h *Hub) Run() {
 // since addToRealm can be called multithreaded, we must protect the map with
 // a mutex.
 func (h *Hub) addToRealm(realm Realm, client *Client) {
+	// adding to a realm means we must remove from another realm, since a client
+	// can only be in one realm at once. We cannot have the realm map hold on
+	// to stale clients in memory!
+
 	h.realmMutex.Lock()
 	defer h.realmMutex.Unlock()
+
+	if client.realm != NullRealm {
+		log.Debug().Msgf("before adding to realm %v, deleting from realm %v",
+			realm, client.realm)
+		if h.realms[client.realm] != nil {
+			delete(h.realms[client.realm], client)
+		} else {
+			log.Error().Str("realm", string(client.realm)).Msg("tried to delete a from a null realm")
+		}
+		if len(h.realms[client.realm]) == 0 {
+			delete(h.realms, client.realm)
+		}
+	}
+
+	// Now add to the given realm.
+
 	// log.Debug().Msgf("h.reamls[realm] %v (%v) %v", h.realms, realm, h.realms[realm])
 	if h.realms[realm] == nil {
 		h.realms[realm] = make(map[*Client]bool)
 	}
+	client.realm = realm
 	h.realms[realm][client] = true
 	h.clients[client] = realm
 }

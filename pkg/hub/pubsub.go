@@ -32,6 +32,8 @@ func newPubSub(natsURL string) (*PubSub, error) {
 		"usertv.>",
 		// gametv messages: for observer mode in a single game.
 		"gametv.>",
+		// private game messages: only for the players of a game.
+		"game.>",
 	}
 	pubSub := &PubSub{
 		natsconn:      natsconn,
@@ -85,6 +87,8 @@ func (h *Hub) PubsubProcess() {
 			}
 
 		case msg := <-h.pubsub.subchans["usertv.>"]:
+			// XXX: This might not really work. We should only send to gametv
+			// and have something else follow the user across games.
 			// A usertv message is meant for people who are watching a user's games.
 			// Find the appropriate Realm.
 			log.Debug().Str("topic", msg.Subject).Msg("got usertv message, forwarding along")
@@ -106,6 +110,17 @@ func (h *Hub) PubsubProcess() {
 			}
 			gameID := subtopics[1]
 			h.sendToRealm(Realm("gametv-"+gameID), msg.Data)
+
+		case msg := <-h.pubsub.subchans["game.>"]:
+			// A game message is meant for people who are playing a game.
+			log.Debug().Str("topic", msg.Subject).Msg("got game message, forwarding along")
+			subtopics := strings.Split(msg.Subject, ".")
+			if len(subtopics) < 2 {
+				log.Error().Msgf("gametv subtopics weird %v", msg.Subject)
+				continue
+			}
+			gameID := subtopics[1]
+			h.sendToRealm(Realm("game-"+gameID), msg.Data)
 		}
 	}
 }
