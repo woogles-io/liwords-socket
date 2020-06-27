@@ -110,11 +110,15 @@ func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 		return []byte(os.Getenv("SECRET_KEY")), nil
 	})
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		// XXX: CHEKC THAT IT HASN'T EXPIRED. I think Valid ^^ might be enough but we need a test.
 
-		// fmt.Println(claims["foo"], claims["nbf"])
-		c.authenticated = true
-		c.username = claims["unn"].(string)
+		c.authenticated, ok = claims["a"].(bool)
+		if !ok {
+			return errors.New("malformed token - a")
+		}
+		c.username, ok = claims["unn"].(string)
+		if !ok {
+			return errors.New("malformed token - unn")
+		}
 		h.realmMutex.Lock()
 		// Delete the old user ID from the map
 		delete(h.clientsByUserID, c.userID)
@@ -126,10 +130,11 @@ func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 		// Add the new user ID to the map.
 		h.clientsByUserID[c.userID][c] = true
 		h.realmMutex.Unlock()
-		log.Debug().Str("username", c.username).Str("userID", c.userID).Msg("authenticated socket connection")
+		log.Debug().Str("username", c.username).Str("userID", c.userID).
+			Bool("auth", c.authenticated).Msg("socket connection")
 		if c.realm != NullRealm {
 			log.Debug().Str("realm", string(c.realm)).Str("username", c.username).
-				Msg("client already in realm, sending init info")
+				Msg("client already in some realm, sending init info")
 			err = h.sendRealmInitInfo(string(c.realm), c.userID)
 		}
 	}
@@ -162,6 +167,7 @@ func registerRealm(c *Client, evt *pb.JoinPath, h *Hub) error {
 		}
 		resp, err := h.pubsub.natsconn.Request("ipc.request.registerRealm", data, ipcTimeout)
 		if err != nil {
+			log.Err(err).Msg("timeout registering realm")
 			return err
 		}
 		log.Debug().Msg("got response from registerRealmReq")

@@ -187,11 +187,12 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uuid := shortuuid.New() // this is going to change very shortly, once we get a token login.
 	client := &Client{
 		hub:      hub,
 		conn:     conn,
-		userID:   shortuuid.New(),
-		username: "Anonymous",
+		userID:   uuid,
+		username: "tmpanon",
 		send:     make(chan []byte, 256),
 	}
 	log.Info().Msg("new anonymous client")
