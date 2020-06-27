@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/domino14/liwords v0.0.0-20200626231120-d1405e06ecce
+	github.com/domino14/liwords v0.0.0-20200627211336-af7b58eb7fb5
 	github.com/gorilla/websocket v1.4.2
 	github.com/lithammer/shortuuid v3.0.0+incompatible
 	github.com/namsral/flag v1.7.4-pre
