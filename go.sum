@@ -18,8 +18,9 @@ github.com/denisenkom/go-mssqldb v0.0.0-20191124224453-732737034ffd h1:83Wprp6RO
 github.com/denisenkom/go-mssqldb v0.0.0-20191124224453-732737034ffd/go.mod h1:xbL0rPBG9cCiLr28tMa8zpbdarY27NDyej4t/EjAShU=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
-github.com/domino14/liwords v0.0.0-20200627211336-af7b58eb7fb5 h1:DfJfZmfo5BjHFevsfXSKHiGUGsp6aIqaAnjhGE0foSI=
-github.com/domino14/liwords v0.0.0-20200627211336-af7b58eb7fb5/go.mod h1:/CptNc/ApxLi78x9I9pStxhhYO3gCz227z6oYtoKFJA=
+github.com/domino14/liwords v0.0.0-20200628014922-a1cc23b1a481 h1:DQWzIAF0OTG6H9V6eF+09Fd+FSQ0aWkIjQ6fhUjpdWc=
+github.com/domino14/liwords v0.0.0-20200630045556-b7fc85b64156 h1:bpKii5euFaLAKJRzqWQVy/APgGeU310OIwzqWfTXK9Y=
+github.com/domino14/liwords v0.0.0-20200630045556-b7fc85b64156/go.mod h1:/CptNc/ApxLi78x9I9pStxhhYO3gCz227z6oYtoKFJA=
 github.com/domino14/macondo v0.4.5-0.20200626143130-459710864953 h1:CFhEUqfQhcyYcktsiO3jQLvfmx4CoSR+fK/uwhVu/hM=
 github.com/domino14/macondo v0.4.5-0.20200626143130-459710864953/go.mod h1:RbTodyfCn9CH+dlixMJ1Mn1EGcdPJ+KjceuS02/MiWM=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=

@@ -9,7 +9,7 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/domino14/liwords/pkg/entity"
-	pb "github.com/domino14/liwords/rpc/api/proto"
+	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 )

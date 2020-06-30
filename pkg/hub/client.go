@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/domino14/liwords/pkg/entity"
-	pb "github.com/domino14/liwords/rpc/api/proto"
+	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
 )
 
 const (
