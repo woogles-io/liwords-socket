@@ -146,13 +146,13 @@ func (c *Client) writePump() {
 			w.Write(message)
 
 			// Add queued messages to the current websocket message.
-			// XXX: FIX ME, THESE NEED TO BE SENT AS SEPARATE MESSAGES.
-			// commenting out for now. There's no delimiter handling
-			// on the client side.
-			// n := len(c.send)
-			// for i := 0; i < n; i++ {
-			// 	w.Write(<-c.send)
-			// }
+			n := len(c.send)
+			for i := 0; i < n; i++ {
+				w.Write(<-c.send)
+			}
+			if n > 0 {
+				log.Debug().Int("msgs", n).Msg("wrote-additional-msgs")
+			}
 
 			if err := w.Close(); err != nil {
 				return

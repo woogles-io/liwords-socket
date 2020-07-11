@@ -38,7 +38,8 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 	// All socket messages are encoded entity.Events.
 	// (or they better be)
 
-	switch pb.MessageType(msg[0]) {
+	// The type byte is [2] ([0] and [1] are length of the packet)
+	switch pb.MessageType(msg[2]) {
 	case pb.MessageType_TOKEN_SOCKET_LOGIN:
 		ew, err := entity.EventFromByteArray(msg)
 		if err != nil {
@@ -52,19 +53,19 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 
 	case pb.MessageType_SEEK_REQUEST:
 		log.Debug().Msg("publishing seek request to NATS")
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.seekRequest"), msg[1:])
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.seekRequest"), msg[3:])
 		if err != nil {
 			return err
 		}
 
 	case pb.MessageType_GAME_ACCEPTED_EVENT:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameAccepted"), msg[1:])
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameAccepted"), msg[3:])
 		if err != nil {
 			return err
 		}
 
 	case pb.MessageType_CLIENT_GAMEPLAY_EVENT:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameplayEvent"), msg[1:])
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameplayEvent"), msg[3:])
 		if err != nil {
 			return err
 		}
@@ -85,13 +86,13 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 		h.removeFromRealm(c)
 
 	case pb.MessageType_TIMED_OUT:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.timedOut"), msg[1:])
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.timedOut"), msg[3:])
 		if err != nil {
 			return err
 		}
 
 	default:
-		return fmt.Errorf("message type %v not yet handled", msg[0])
+		return fmt.Errorf("message type %v not yet handled", msg[2])
 	}
 
 	return nil
