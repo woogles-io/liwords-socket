@@ -106,6 +106,11 @@ func (h *Hub) removeClient(c *Client) error {
 		delete(h.clientsByUserID, c.userID)
 		log.Debug().Msgf("deleted client from clientsbyuserid. New length %v", len(
 			h.clientsByUserID))
+
+		// Tell the backend that this user has left the site. The backend
+		// can then do things (cancel seek requests, inform players their
+		// opponent has left, etc).
+		h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.leaveSite"), []byte{})
 		return nil
 	}
 	// Otherwise, delete just one of the sockets.

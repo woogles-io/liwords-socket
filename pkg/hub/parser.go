@@ -121,7 +121,8 @@ func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 			return errors.New("malformed token - unn")
 		}
 		h.realmMutex.Lock()
-		// Delete the old user ID from the map
+		// Delete the old user ID from the map -- this is usually a temporary
+		// user.
 		delete(h.clientsByUserID, c.userID)
 		c.userID = claims["uid"].(string)
 		byUser := h.clientsByUserID[c.userID]
