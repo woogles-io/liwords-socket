@@ -19,7 +19,7 @@ func main() {
 
 	cfg := &config.Config{}
 	cfg.Load(os.Args[1:])
-	log.Info().Msgf("Loaded config: %v", cfg)
+	log.Info().Msgf("Socket: Loaded config: %v", cfg)
 
 	if cfg.Debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)

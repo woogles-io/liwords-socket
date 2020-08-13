@@ -58,8 +58,24 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 			return err
 		}
 
-	case pb.MessageType_GAME_ACCEPTED_EVENT:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameAccepted"), msg[3:])
+	case pb.MessageType_MATCH_REQUEST:
+		log.Debug().Msg("publishing match request to NATS")
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.matchRequest"), msg[3:])
+		if err != nil {
+			return err
+		}
+
+	case pb.MessageType_DECLINE_MATCH_REQUEST:
+		log.Debug().Msg("publishing decline match request to NATS")
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.declineMatchRequest"), msg[3:])
+		if err != nil {
+			return err
+		}
+
+	case pb.MessageType_SOUGHT_GAME_PROCESS_EVENT:
+		log.Debug().Msg("publishing sought game process to NATS")
+
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.soughtGameProcess"), msg[3:])
 		if err != nil {
 			return err
 		}
