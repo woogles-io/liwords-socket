@@ -9,7 +9,6 @@ import (
 
 	// "github.com/domino14/liwords/pkg/entity"
 	"github.com/gorilla/websocket"
-	"github.com/lithammer/shortuuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/domino14/liwords/pkg/entity"
@@ -187,15 +186,21 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uuid := shortuuid.New() // this is going to change very shortly, once we get a token login.
-	client := &Client{
-		hub:      hub,
-		conn:     conn,
-		userID:   uuid,
-		username: "tmpanon",
-		send:     make(chan []byte, 256),
+	tokens, ok := r.URL.Query()["token"]
+	if !ok || len(tokens[0]) < 1 {
+		log.Error().Msg("token is missing")
+		return
 	}
-	log.Info().Msg("new anonymous client")
+
+	client := &Client{
+		hub:  hub,
+		conn: conn,
+		send: make(chan []byte, 256),
+	}
+	err = hub.socketLogin(client, tokens[0])
+	if err != nil {
+		log.Err(err).Msg("socket-login-error")
+	}
 
 	client.hub.register <- client
 

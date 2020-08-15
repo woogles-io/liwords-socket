@@ -40,16 +40,6 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 
 	// The type byte is [2] ([0] and [1] are length of the packet)
 	switch pb.MessageType(msg[2]) {
-	case pb.MessageType_TOKEN_SOCKET_LOGIN:
-		ew, err := entity.EventFromByteArray(msg)
-		if err != nil {
-			return err
-		}
-		evt, ok := ew.Event.(*pb.TokenSocketLogin)
-		if !ok {
-			return errors.New("unexpected socket login typing error")
-		}
-		return h.socketLogin(c, evt)
 
 	case pb.MessageType_SEEK_REQUEST:
 		log.Debug().Msg("publishing seek request to NATS")
@@ -86,6 +76,12 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 			return err
 		}
 
+	case pb.MessageType_CHAT_MESSAGE:
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.chat"), msg[3:])
+		if err != nil {
+			return err
+		}
+
 	case pb.MessageType_JOIN_PATH:
 		ew, err := entity.EventFromByteArray(msg)
 		if err != nil {
@@ -114,8 +110,7 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 	return nil
 }
 
-func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
-	tokenString := evt.Token
+func (h *Hub) socketLogin(c *Client, tokenString string) error {
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
@@ -137,9 +132,7 @@ func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 			return errors.New("malformed token - unn")
 		}
 		h.realmMutex.Lock()
-		// Delete the old user ID from the map -- this is usually a temporary
-		// user.
-		delete(h.clientsByUserID, c.userID)
+
 		c.userID = claims["uid"].(string)
 		byUser := h.clientsByUserID[c.userID]
 		if byUser == nil {
@@ -150,11 +143,6 @@ func (h *Hub) socketLogin(c *Client, evt *pb.TokenSocketLogin) error {
 		h.realmMutex.Unlock()
 		log.Debug().Str("username", c.username).Str("userID", c.userID).
 			Bool("auth", c.authenticated).Msg("socket connection")
-		if c.realm != NullRealm {
-			log.Debug().Str("realm", string(c.realm)).Str("username", c.username).
-				Msg("client already in some realm, sending init info")
-			err = h.sendRealmInitInfo(string(c.realm), c.userID)
-		}
 	}
 	if err != nil {
 		log.Err(err).Msg("socket-login-failure")
