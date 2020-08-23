@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/domino14/liwords/pkg/entity"
 	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
 	"github.com/rs/zerolog/log"
@@ -108,46 +106,6 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 	}
 
 	return nil
-}
-
-func (h *Hub) socketLogin(c *Client, tokenString string) error {
-
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Don't forget to validate the alg is what you expect:
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-		}
-
-		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
-		return []byte(os.Getenv("SECRET_KEY")), nil
-	})
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-
-		c.authenticated, ok = claims["a"].(bool)
-		if !ok {
-			return errors.New("malformed token - a")
-		}
-		c.username, ok = claims["unn"].(string)
-		if !ok {
-			return errors.New("malformed token - unn")
-		}
-		h.realmMutex.Lock()
-
-		c.userID = claims["uid"].(string)
-		byUser := h.clientsByUserID[c.userID]
-		if byUser == nil {
-			h.clientsByUserID[c.userID] = make(map[*Client]bool)
-		}
-		// Add the new user ID to the map.
-		h.clientsByUserID[c.userID][c] = true
-		h.realmMutex.Unlock()
-		log.Debug().Str("username", c.username).Str("userID", c.userID).
-			Bool("auth", c.authenticated).Msg("socket connection")
-	}
-	if err != nil {
-		log.Err(err).Msg("socket-login-failure")
-	}
-	return err
 }
 
 func registerRealm(c *Client, evt *pb.JoinPath, h *Hub) error {

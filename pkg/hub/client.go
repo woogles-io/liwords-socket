@@ -59,8 +59,8 @@ type Client struct {
 	// single "realm" at a time. A realm is an abstract thing that is akin
 	// to a "chatroom". Some example realms:
 	// - lobby
-	// - game-gameid-player   -- A realm just for the two players of a game.
-	// - game-gameid-observer -- A realm for observers of a game.
+	// - game-gameid   -- A realm just for the two players of a game.
+	// - gametv-gameid -- A realm for observers of a game.
 	// - tourney-tourneyid -- A realm for a tourney "room", with its own chat room and standings
 	// If you want to join multiple realms, use multiple tabs (although, that's not a use
 	// case we necessarily want to encourage)
@@ -98,7 +98,8 @@ func (c *Client) readPump() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Err(err).Msg("unexpected-close")
 			}
-			log.Err(err).Msg("other-error-breaking-out")
+			// Probably a regular disconnect:
+			log.Debug().Err(err).Msg("other-error-breaking-out")
 			break
 		}
 
@@ -182,15 +183,16 @@ func closeMessage(ws *websocket.Conn, errStr string) {
 
 // ServeWS handles websocket requests from the peer.
 func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Err(err).Msg("upgrading socket")
-		return
-	}
-
 	tokens, ok := r.URL.Query()["token"]
 	if !ok || len(tokens[0]) < 1 {
 		log.Error().Msg("token is missing")
+		return
+	}
+	token := tokens[0]
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Err(err).Msg("upgrading socket")
 		return
 	}
 
@@ -199,9 +201,11 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		conn: conn,
 		send: make(chan []byte, 256),
 	}
-	err = hub.socketLogin(client, tokens[0])
+	err = hub.socketLogin(client, token)
 	if err != nil {
 		log.Err(err).Msg("socket-login-error")
+		conn.Close()
+		return
 	}
 
 	client.hub.register <- client

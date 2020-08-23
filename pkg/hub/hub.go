@@ -2,8 +2,11 @@ package sockets
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"sync"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/domino14/liwords-socket/pkg/config"
 	"github.com/rs/zerolog/log"
 )
@@ -117,7 +120,7 @@ func (h *Hub) removeClient(c *Client) error {
 		h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.leaveSite"), []byte{})
 		return nil
 	}
-	// Otherwise, delete just one of the sockets.
+	// Otherwise, delete just the right socket (this one: c)
 	// {"level":"debug","userid":"uNNCgSXCB2LEMjN6shBp7J","numconn":2,"time":"2020-08-22T20:40:33Z","message":"non-o
 	log.Debug().Interface("userid", c.userID).Int("numconn", len(h.clientsByUserID[c.userID])).
 		Msg("non-one-num-conns")
@@ -154,6 +157,7 @@ func (h *Hub) Run() {
 				if err != nil {
 					log.Err(err).Msg("error-removing-client")
 				}
+				log.Info().Str("username", client.username).Msg("unregistered-client")
 			} else {
 				log.Error().Msg("unregistered-but-not-in-map")
 			}
@@ -232,4 +236,47 @@ func (h *Hub) removeFromRealm(client *Client) {
 		delete(h.realms, realm)
 	}
 	h.clients[client] = NullRealm
+}
+
+func (h *Hub) socketLogin(c *Client, tokenString string) error {
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+
+		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+		return []byte(os.Getenv("SECRET_KEY")), nil
+	})
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+
+		c.authenticated, ok = claims["a"].(bool)
+		if !ok {
+			return errors.New("malformed token - a")
+		}
+		c.username, ok = claims["unn"].(string)
+		if !ok {
+			return errors.New("malformed token - unn")
+		}
+		h.realmMutex.Lock()
+
+		c.userID = claims["uid"].(string)
+		byUser := h.clientsByUserID[c.userID]
+		if byUser == nil {
+			h.clientsByUserID[c.userID] = make(map[*Client]bool)
+		}
+		// Add the new user ID to the map.
+		h.clientsByUserID[c.userID][c] = true
+		h.realmMutex.Unlock()
+		log.Debug().Str("username", c.username).Str("userID", c.userID).
+			Bool("auth", c.authenticated).Msg("socket connection")
+	}
+	if err != nil {
+		log.Err(err).Msg("socket-login-failure")
+	}
+	if !token.Valid {
+		return errors.New("invalid token")
+	}
+	return err
 }
