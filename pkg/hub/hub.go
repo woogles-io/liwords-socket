@@ -86,11 +86,14 @@ func (h *Hub) removeClient(c *Client) error {
 
 	realm := h.clients[c]
 	if c.realm != realm {
+		// Error here before the panic. {"level":"error","realm":"","c.realm":"lobby"
+
 		log.Error().Str("realm", string(realm)).Str("c.realm", string(c.realm)).
 			Msg("client realm doesn't match")
 	}
 
 	delete(h.realms[realm], c)
+	//{"level":"debug","time":"2020-08-22T20:40:33Z","message":"deleted client from realm . New length 0"}
 	log.Debug().Msgf("deleted client from realm %v. New length %v", realm, len(
 		h.realms[realm]))
 
@@ -99,6 +102,7 @@ func (h *Hub) removeClient(c *Client) error {
 	}
 
 	delete(h.clients, c)
+	// {"level":"debug","time":"2020-08-22T20:40:33Z","message":"deleted client from clients. New length 2"}
 	log.Debug().Msgf("deleted client from clients. New length %v", len(
 		h.clients))
 
@@ -114,6 +118,7 @@ func (h *Hub) removeClient(c *Client) error {
 		return nil
 	}
 	// Otherwise, delete just one of the sockets.
+	// {"level":"debug","userid":"uNNCgSXCB2LEMjN6shBp7J","numconn":2,"time":"2020-08-22T20:40:33Z","message":"non-o
 	log.Debug().Interface("userid", c.userID).Int("numconn", len(h.clientsByUserID[c.userID])).
 		Msg("non-one-num-conns")
 	delete(h.clientsByUserID[c.userID], c)
@@ -130,7 +135,6 @@ func (h *Hub) sendToRealm(realm Realm, msg []byte) error {
 		return errors.New("realm is empty")
 	}
 	h.broadcastRealm <- RealmMessage{realm: realm, msg: msg}
-	log.Debug().Msg("returning nil")
 	return nil
 }
 
@@ -155,11 +159,13 @@ func (h *Hub) Run() {
 			}
 
 		case message := <-h.broadcastRealm:
+			// {"level":"debug","realm":"lobby","clients":2,"time":"2020-08-22T20:40:40Z","message":"sending broadcast message to realm"}
 			log.Debug().Str("realm", string(message.realm)).
 				Int("clients", len(h.realms[message.realm])).
 				Msg("sending broadcast message to realm")
 			for client := range h.realms[message.realm] {
 				select {
+				// XXX: got a panic: send on closed channel from this line:
 				case client.send <- message.msg:
 				default:
 					h.removeClient(client)
@@ -175,6 +181,11 @@ func (h *Hub) addToRealm(realm Realm, client *Client) {
 	// adding to a realm means we must remove from another realm, since a client
 	// can only be in one realm at once. We cannot have the realm map hold on
 	// to stale clients in memory!
+
+	if client.realm == realm {
+		log.Info().Str("realm", string(realm)).Msg("user already in realm")
+		return
+	}
 
 	h.realmMutex.Lock()
 	defer h.realmMutex.Unlock()

@@ -98,6 +98,7 @@ func (c *Client) readPump() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Err(err).Msg("unexpected-close")
 			}
+			log.Err(err).Msg("other-error-breaking-out")
 			break
 		}
 
@@ -135,6 +136,7 @@ func (c *Client) writePump() {
 				// The hub closed the channel.
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				log.Info().Msg("hub closed channel")
+				// XXX: should we remove the connection here??
 				return
 			}
 
