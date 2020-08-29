@@ -188,7 +188,13 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Error().Msg("token is missing")
 		return
 	}
+	paths, ok := r.URL.Query()["path"]
+	if !ok || len(paths[0]) < 1 {
+		log.Error().Msg("path is missing")
+		return
+	}
 	token := tokens[0]
+	path := paths[0]
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -214,4 +220,10 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
+
+	err = registerRealm(client, path, hub)
+	if err != nil {
+		log.Err(err).Msg("register-realm-error")
+		conn.Close()
+	}
 }

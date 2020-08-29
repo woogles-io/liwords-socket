@@ -9,6 +9,9 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/domino14/liwords-socket/pkg/config"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
+
+	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
 )
 
 // A Realm is basically a set of clients. It can be thought of as a game room,
@@ -70,7 +73,7 @@ func NewHub(cfg *config.Config) (*Hub, error) {
 func (h *Hub) addClient(client *Client) error {
 	// no need to protect with mutex, only called from
 	// single-threaded Run
-	h.clients[client] = NullRealm
+	h.clients[client] = client.realm
 	byUser := h.clientsByUserID[client.userID]
 
 	if byUser == nil {
@@ -89,14 +92,12 @@ func (h *Hub) removeClient(c *Client) error {
 
 	realm := h.clients[c]
 	if c.realm != realm {
-		// Error here before the panic. {"level":"error","realm":"","c.realm":"lobby"
 
 		log.Error().Str("realm", string(realm)).Str("c.realm", string(c.realm)).
 			Msg("client realm doesn't match")
 	}
 
 	delete(h.realms[realm], c)
-	//{"level":"debug","time":"2020-08-22T20:40:33Z","message":"deleted client from realm . New length 0"}
 	log.Debug().Msgf("deleted client from realm %v. New length %v", realm, len(
 		h.realms[realm]))
 
@@ -105,7 +106,6 @@ func (h *Hub) removeClient(c *Client) error {
 	}
 
 	delete(h.clients, c)
-	// {"level":"debug","time":"2020-08-22T20:40:33Z","message":"deleted client from clients. New length 2"}
 	log.Debug().Msgf("deleted client from clients. New length %v", len(
 		h.clients))
 
@@ -121,7 +121,6 @@ func (h *Hub) removeClient(c *Client) error {
 		return nil
 	}
 	// Otherwise, delete just the right socket (this one: c)
-	// {"level":"debug","userid":"uNNCgSXCB2LEMjN6shBp7J","numconn":2,"time":"2020-08-22T20:40:33Z","message":"non-o
 	log.Debug().Interface("userid", c.userID).Int("numconn", len(h.clientsByUserID[c.userID])).
 		Msg("non-one-num-conns")
 	delete(h.clientsByUserID[c.userID], c)
@@ -218,26 +217,6 @@ func (h *Hub) addToRealm(realm Realm, client *Client) {
 	h.clients[client] = realm
 }
 
-func (h *Hub) removeFromRealm(client *Client) {
-	h.realmMutex.Lock()
-	defer h.realmMutex.Unlock()
-	realm := client.realm
-	if realm == NullRealm {
-		log.Error().Msg("tried to remove from null realm")
-		return
-	}
-	if h.realms[realm] != nil {
-		delete(h.realms[realm], client)
-	} else {
-		log.Error().Str("realm", string(realm)).Msg("tried to delete a from a null realm")
-	}
-	// Delete realm if empty.
-	if len(h.realms[realm]) == 0 {
-		delete(h.realms, realm)
-	}
-	h.clients[client] = NullRealm
-}
-
 func (h *Hub) socketLogin(c *Client, tokenString string) error {
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -279,4 +258,67 @@ func (h *Hub) socketLogin(c *Client, tokenString string) error {
 		return errors.New("invalid token")
 	}
 	return err
+}
+
+func registerRealm(c *Client, path string, h *Hub) error {
+	// There are a variety of possible realms that a person joining a game
+	// can be in. We should not trust the user to send the right realm
+	// (for example they can send a TV mode realm if they're a player
+	// in the game or vice versa). The backend should determine the right realm
+	// and assign it accordingly.
+	log.Debug().Str("path", path).Msg("register-realm-path")
+	var realm string
+	if path == "/" {
+		// This is the lobby; no need to request a realm.
+		h.addToRealm(LobbyRealm, c)
+		realm = string(LobbyRealm)
+	} else {
+		// First, create a request and send to the IPC api:
+		rrr := &pb.RegisterRealmRequest{}
+		rrr.Realm = path
+		rrr.UserId = c.userID
+		data, err := proto.Marshal(rrr)
+		if err != nil {
+			return err
+		}
+		resp, err := h.pubsub.natsconn.Request("ipc.request.registerRealm", data, ipcTimeout)
+		if err != nil {
+			log.Err(err).Msg("timeout registering realm")
+			return err
+		}
+		log.Debug().Msg("got response from registerRealmReq")
+		// The response contains the correct realm for the user.
+		rrResp := &pb.RegisterRealmResponse{}
+		err = proto.Unmarshal(resp.Data, rrResp)
+		if err != nil {
+			return err
+		}
+		realm = rrResp.Realm
+		if Realm(realm) != NullRealm {
+			// Only add to the realm that the API says to add to.
+			h.addToRealm(Realm(realm), c)
+		}
+	}
+	// Meow, depending on the realm, request that the API publish
+	// initial information pertaining to this realm. For example,
+	// lobby visitors will want to see a list of sought games,
+	// or newcomers to a game realm will want to see the history
+	// of the game so far.
+	return h.sendRealmInitInfo(realm, c.userID)
+	// The API will publish the initial realm information to this user's channel.
+	// (user.userID - see pubsub.go)
+}
+
+func (h *Hub) sendRealmInitInfo(realm string, userID string) error {
+	req := &pb.InitRealmInfo{
+		Realm:  realm,
+		UserId: userID,
+	}
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
+
+	return h.pubsub.natsconn.Publish("ipc.pb.initRealmInfo", data)
 }
