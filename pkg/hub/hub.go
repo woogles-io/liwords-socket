@@ -92,9 +92,14 @@ func (h *Hub) removeClient(c *Client) error {
 
 	realm := h.clients[c]
 	if c.realm != realm {
-
+		// There is a problem here. If this line triggers then we will delete
+		// the client from the wrong map -- somewhere the client might not actually
+		// be. This will cause a panic if we then try to send data to the client
+		// on a closed channel.
 		log.Error().Str("realm", string(realm)).Str("c.realm", string(c.realm)).
 			Msg("client realm doesn't match")
+		// Try deleting from c.realm map just in case
+		delete(h.realms[c.realm], c)
 	}
 
 	delete(h.realms[realm], c)
@@ -268,6 +273,8 @@ func registerRealm(c *Client, path string, h *Hub) error {
 	// and assign it accordingly.
 	log.Debug().Str("path", path).Msg("register-realm-path")
 	var realm string
+
+	// if strings.HasPrefix(path, )
 	if path == "/" {
 		// This is the lobby; no need to request a realm.
 		h.addToRealm(LobbyRealm, c)
