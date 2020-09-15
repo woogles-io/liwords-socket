@@ -27,6 +27,13 @@ type RealmMessage struct {
 	msg   []byte
 }
 
+// A UserMessage is a message that should be sent to a user (across all
+// of the sockets that they are connected to).
+type UserMessage struct {
+	userID string
+	msg    []byte
+}
+
 // Hub maintains the set of active clients and broadcasts messages to the
 // clients.
 type Hub struct {
@@ -50,6 +57,7 @@ type Hub struct {
 	realms map[Realm]map[*Client]bool
 
 	broadcastRealm chan RealmMessage
+	broadcastUser  chan UserMessage
 }
 
 func NewHub(cfg *config.Config) (*Hub, error) {
@@ -61,6 +69,7 @@ func NewHub(cfg *config.Config) (*Hub, error) {
 	return &Hub{
 		// broadcast:         make(chan []byte),
 		broadcastRealm:  make(chan RealmMessage),
+		broadcastUser:   make(chan UserMessage),
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
 		clients:         make(map[*Client]Realm),
@@ -145,6 +154,14 @@ func (h *Hub) sendToRealm(realm Realm, msg []byte) error {
 	return nil
 }
 
+func (h *Hub) sendToUser(userID string, msg []byte) error {
+	log.Debug().
+		Str("userid", userID).
+		Msg("sending to all user sockets")
+	h.broadcastUser <- UserMessage{userID: userID, msg: msg}
+	return nil
+}
+
 func (h *Hub) Run() {
 	go h.PubsubProcess()
 	for {
@@ -174,6 +191,18 @@ func (h *Hub) Run() {
 			for client := range h.realms[message.realm] {
 				select {
 				// XXX: got a panic: send on closed channel from this line:
+				case client.send <- message.msg:
+				default:
+					h.removeClient(client)
+				}
+			}
+
+		case message := <-h.broadcastUser:
+			log.Debug().Str("user", string(message.userID)).
+				Msg("sending to all user sockets")
+			// Send the message to every socket belonging to this user.
+			for client := range h.clientsByUserID[message.userID] {
+				select {
 				case client.send <- message.msg:
 				default:
 					h.removeClient(client)

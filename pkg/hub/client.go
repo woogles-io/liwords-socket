@@ -138,6 +138,7 @@ func (c *Client) writePump() {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				log.Info().Msg("hub closed channel")
 				// XXX: should we remove the connection here??
+				// maybe not since the connection close happens in the defer.
 				return
 			}
 

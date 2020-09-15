@@ -81,10 +81,7 @@ func (h *Hub) PubsubProcess() {
 				continue
 			}
 			userID := subtopics[1]
-			// Send the message to every socket belonging to this user.
-			for client := range h.clientsByUserID[userID] {
-				client.send <- msg.Data
-			}
+			h.sendToUser(userID, msg.Data)
 
 		case msg := <-h.pubsub.subchans["usertv.>"]:
 			// XXX: This might not really work. We should only send to gametv
