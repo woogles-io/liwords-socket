@@ -1,0 +1,32 @@
+# Golang CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-go/ for more details
+version: 2.1
+orbs:
+  slack: circleci/slack@3.4.2
+jobs:
+  # We need to write some tests for socket server. For now we just create
+  # a new docker image.
+  deploy_socket_docker:
+    machine: true
+    steps:
+      - checkout
+      - run: echo $GHCR_TOKEN | docker login ghcr.io -u domino14 --password-stdin
+      - run: docker build -t ghcr.io/domino14/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM} .
+      - run: docker push ghcr.io/domino14/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}
+      - slack/status:
+          webhook: "${SLACK_WEBHOOK}"
+          success_message: ":tada: A $CIRCLE_JOB job has succeeded! (Branch: $CIRCLE_BRANCH)"
+          failure_message: ":red_circle: A $CIRCLE_JOB job has failed! (Branch: $CIRCLE_BRANCH)"
+
+workflows:
+  version: 2
+  build_app:
+    jobs:
+      - deploy_socket_docker:
+          context:
+            - woogles-deploy
+          filters:
+            branches:
+              only:
+                - master
