@@ -15,6 +15,12 @@ const (
 	GracefulShutdownTimeout = 30 * time.Second
 )
 
+func pingEndpoint(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"copacetic"}`))
+}
+
 func main() {
 
 	cfg := &config.Config{}
@@ -42,6 +48,7 @@ func main() {
 	// 	r.URL.Path = "/"
 	// 	staticHandler.ServeHTTP(w, r)
 	// })
+	http.HandleFunc("/ping", http.HandlerFunc(pingEndpoint))
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		sockets.ServeWS(h, w, r)
