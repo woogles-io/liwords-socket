@@ -18,7 +18,7 @@ RUN go build
 # Build minimal image:
 FROM alpine
 COPY --from=build-env /opt/program/cmd/socketsrv/socketsrv /opt/socketsrv
-
+RUN apk --no-cache add curl
 EXPOSE 8087
 
 WORKDIR /opt
