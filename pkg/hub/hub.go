@@ -80,8 +80,12 @@ func NewHub(cfg *config.Config) (*Hub, error) {
 }
 
 func (h *Hub) addClient(client *Client) error {
-	// no need to protect with mutex, only called from
-	// single-threaded Run
+	// This function is called from Run() and also indirectly from
+	// the ServeWS function, which runs in another goroutine.
+	// Therefore, we must protect the maps with a mutex.
+	h.realmMutex.Lock()
+	defer h.realmMutex.Unlock()
+
 	h.clients[client] = client.realm
 	byUser := h.clientsByUserID[client.userID]
 
@@ -147,9 +151,6 @@ func (h *Hub) sendToRealm(realm Realm, msg []byte) error {
 		Int("inrealm", len(h.realms[realm])).
 		Msg("sending to realm")
 
-	if len(h.realms[realm]) == 0 {
-		return errors.New("realm is empty")
-	}
 	h.broadcastRealm <- RealmMessage{realm: realm, msg: msg}
 	return nil
 }

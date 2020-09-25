@@ -182,7 +182,8 @@ func closeMessage(ws *websocket.Conn, errStr string) {
 	return
 }
 
-// ServeWS handles websocket requests from the peer.
+// ServeWS handles websocket requests from the peer. This runs in its own
+// goroutine.
 func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	tokens, ok := r.URL.Query()["token"]
 	if !ok || len(tokens[0]) < 1 {
@@ -222,6 +223,7 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	go client.writePump()
 	go client.readPump()
 
+	//
 	err = registerRealm(client, path, hub)
 	if err != nil {
 		log.Err(err).Msg("register-realm-error")
