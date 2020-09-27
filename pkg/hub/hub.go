@@ -248,6 +248,7 @@ func (h *Hub) addToRealm(realm Realm, client *Client) {
 		h.realms[realm] = make(map[*Client]bool)
 	}
 	client.realm = realm
+	// XXX: PANIC CONCURRENT WRITE HERE:
 	h.realms[realm][client] = true
 	h.clients[client] = realm
 }

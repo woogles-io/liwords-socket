@@ -21,11 +21,19 @@ func pingEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"status":"copacetic"}`))
 }
 
+var (
+	// BuildHash is the git hash, set by go build flags
+	BuildHash = "unknown"
+	// BuildDate is the build date, set by go build flags
+	BuildDate = "unknown"
+)
+
 func main() {
 
 	cfg := &config.Config{}
 	cfg.Load(os.Args[1:])
-	log.Info().Msgf("Socket: Loaded config: %v", cfg)
+	log.Info().Interface("config", cfg).
+		Str("build-date", BuildDate).Str("build-hash", BuildHash).Msg("started")
 
 	if cfg.Debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
