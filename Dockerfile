@@ -26,4 +26,4 @@ RUN apk --no-cache add curl
 EXPOSE 8087
 
 WORKDIR /opt
-CMD ./socketsrv
+CMD ["./socketsrv"]

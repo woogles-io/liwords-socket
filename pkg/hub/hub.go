@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/dgrijalva/jwt-go"
@@ -28,10 +29,11 @@ type RealmMessage struct {
 }
 
 // A UserMessage is a message that should be sent to a user (across all
-// of the sockets that they are connected to).
+// of the sockets that they are connected to, unless the channel says otherwise).
 type UserMessage struct {
-	userID string
-	msg    []byte
+	userID  string
+	channel string
+	msg     []byte
 }
 
 // Hub maintains the set of active clients and broadcasts messages to the
@@ -127,6 +129,12 @@ func (h *Hub) removeClient(c *Client) error {
 	log.Debug().Msgf("deleted client from clients. New length %v", len(
 		h.clients))
 
+	// xxx: trigger leaveSite even if this isn't the last tab. We would
+	// pass in a conn ID of some sort. We would associate outgoing
+	// seek / match requests with a conn ID.
+
+	h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.leaveTab"), []byte{})
+
 	if (len(h.clientsByUserID[c.userID])) == 1 {
 		delete(h.clientsByUserID, c.userID)
 		log.Debug().Msgf("deleted client from clientsbyuserid. New length %v", len(
@@ -160,6 +168,12 @@ func (h *Hub) sendToUser(userID string, msg []byte) error {
 		Str("userid", userID).
 		Msg("sending to all user sockets")
 	h.broadcastUser <- UserMessage{userID: userID, msg: msg}
+	return nil
+}
+
+func (h *Hub) sendToUserChannel(userID string, msg []byte, channel string) error {
+	log.Debug().Str("userid", userID).Str("channel", channel).Msg("sending to channel sockets")
+	h.broadcastUser <- UserMessage{userID: userID, msg: msg, channel: channel}
 	return nil
 }
 
@@ -203,6 +217,12 @@ func (h *Hub) Run() {
 				Msg("sending to all user sockets")
 			// Send the message to every socket belonging to this user.
 			for client := range h.clientsByUserID[message.userID] {
+				realmToChannel := strings.ReplaceAll(string(client.realm), "-", ".")
+				if message.channel != "" && !strings.HasPrefix(message.channel, realmToChannel) {
+					// if the message has a channel attached to it, it needs to be
+					// a prefix of the realm in order to be delivered.
+					continue
+				}
 				select {
 				case client.send <- message.msg:
 				default:
@@ -248,7 +268,6 @@ func (h *Hub) addToRealm(realm Realm, client *Client) {
 		h.realms[realm] = make(map[*Client]bool)
 	}
 	client.realm = realm
-	// XXX: PANIC CONCURRENT WRITE HERE:
 	h.realms[realm][client] = true
 	h.clients[client] = realm
 }

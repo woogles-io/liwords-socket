@@ -9,6 +9,7 @@ import (
 
 	// "github.com/domino14/liwords/pkg/entity"
 	"github.com/gorilla/websocket"
+	"github.com/lithammer/shortuuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/domino14/liwords/pkg/entity"
@@ -64,7 +65,8 @@ type Client struct {
 	// - tourney-tourneyid -- A realm for a tourney "room", with its own chat room and standings
 	// If you want to join multiple realms, use multiple tabs (although, that's not a use
 	// case we necessarily want to encourage)
-	realm Realm
+	realm  Realm
+	connID string
 }
 
 func (c *Client) sendError(err error) {
@@ -205,9 +207,10 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		hub:  hub,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:    hub,
+		conn:   conn,
+		send:   make(chan []byte, 256),
+		connID: shortuuid.New(),
 	}
 	err = hub.socketLogin(client, token)
 	if err != nil {

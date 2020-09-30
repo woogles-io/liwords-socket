@@ -75,13 +75,17 @@ func (h *Hub) PubsubProcess() {
 			// If we get a user message, we should send it along to the given
 			// user.
 			log.Debug().Str("topic", msg.Subject).Msg("got user message, forwarding along")
-			subtopics := strings.Split(msg.Subject, ".")
+			subtopics := strings.SplitN(msg.Subject, ".", 3)
 			if len(subtopics) < 2 {
 				log.Error().Msgf("user subtopics weird %v", msg.Subject)
 				continue
 			}
 			userID := subtopics[1]
-			h.sendToUser(userID, msg.Data)
+			if len(subtopics) < 3 {
+				h.sendToUser(userID, msg.Data)
+			} else {
+				h.sendToUserChannel(userID, msg.Data, subtopics[2])
+			}
 
 		case msg := <-h.pubsub.subchans["usertv.>"]:
 			// XXX: This might not really work. We should only send to gametv

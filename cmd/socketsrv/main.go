@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/domino14/liwords-socket/pkg/config"
@@ -48,45 +51,42 @@ func main() {
 		panic(err)
 	}
 	go h.Run()
-	// go hub.RunGameEventHandler()
 
-	// http.HandleFunc("/")
+	router := http.NewServeMux() // here you could also go with third party packages to create a router
 
-	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-	// 	r.URL.Path = "/"
-	// 	staticHandler.ServeHTTP(w, r)
-	// })
-	http.HandleFunc("/ping", http.HandlerFunc(pingEndpoint))
+	router.Handle("/ping", http.HandlerFunc(pingEndpoint))
 
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	router.Handle("/ws", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sockets.ServeWS(h, w, r)
-	})
-	err = http.ListenAndServe(cfg.WebsocketAddress, nil)
-	if err != nil {
-		log.Fatal().Err(err).Msg("ListenAndServe")
+	}))
+
+	srv := &http.Server{
+		Addr:         cfg.WebsocketAddress,
+		Handler:      router,
+		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  10 * time.Second}
+
+	idleConnsClosed := make(chan struct{})
+	sig := make(chan os.Signal, 1)
+
+	go func() {
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		log.Info().Msg("got quit signal...")
+		ctx, cancel := context.WithTimeout(context.Background(), GracefulShutdownTimeout)
+		if err := srv.Shutdown(ctx); err != nil {
+			// Error from closing listeners, or context timeout:
+			log.Error().Msgf("HTTP server Shutdown: %v", err)
+		}
+		cancel()
+		close(idleConnsClosed)
+	}()
+
+	log.Info().Msg("starting listening...")
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal().Err(err).Msg("")
 	}
-
-	// srv := &http.Server{Addr: ":8088", Handler: handler}
-
-	// idleConnsClosed := make(chan struct{})
-	// sig := make(chan os.Signal, 1)
-
-	// go func() {
-	// 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	// 	<-sig
-	// 	log.Info().Msg("got quit signal...")
-	// 	ctx, cancel := context.WithTimeout(context.Background(), GracefulShutdownTimeout)
-	// 	if err := srv.Shutdown(ctx); err != nil {
-	// 		// Error from closing listeners, or context timeout:
-	// 		log.Error().Msgf("HTTP server Shutdown: %v", err)
-	// 	}
-	// 	cancel()
-	// 	close(idleConnsClosed)
-	// }()
-
-	// if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-	// 	log.Fatal().Err(err).Msg("")
-	// }
-	// <-idleConnsClosed
-	// log.Info().Msg("server gracefully shutting down")
+	<-idleConnsClosed
+	log.Info().Msg("server gracefully shutting down")
 }

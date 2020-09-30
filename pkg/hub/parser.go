@@ -26,7 +26,7 @@ func extendTopic(c *Client, topic string) string {
 	}
 	second = c.userID
 
-	return topic + "." + first + "." + second
+	return topic + "." + first + "." + second + "." + c.connID
 }
 
 func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client) error {
