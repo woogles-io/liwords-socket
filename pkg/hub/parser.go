@@ -71,6 +71,12 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 			return err
 		}
 
+	case pb.MessageType_READY_FOR_GAME:
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.readyForGame"), msg[3:])
+		if err != nil {
+			return err
+		}
+
 	case pb.MessageType_CHAT_MESSAGE:
 		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.chat"), msg[3:])
 		if err != nil {

@@ -72,7 +72,7 @@ type Client struct {
 }
 
 func (c *Client) sendError(err error) {
-	evt := entity.WrapEvent(&pb.ErrorMessage{Message: err.Error()}, pb.MessageType_ERROR_MESSAGE, "")
+	evt := entity.WrapEvent(&pb.ErrorMessage{Message: err.Error()}, pb.MessageType_ERROR_MESSAGE)
 	bts, err := evt.Serialize()
 	if err != nil {
 		// This really shouldn't happen.
