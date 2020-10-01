@@ -9,7 +9,6 @@ import (
 
 	// "github.com/domino14/liwords/pkg/entity"
 	"github.com/gorilla/websocket"
-	"github.com/lithammer/shortuuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/domino14/liwords/pkg/entity"
@@ -65,8 +64,11 @@ type Client struct {
 	// - tourney-tourneyid -- A realm for a tourney "room", with its own chat room and standings
 	// If you want to join multiple realms, use multiple tabs (although, that's not a use
 	// case we necessarily want to encourage)
-	realm  Realm
-	connID string
+	realm Realm
+	// tempRealm is a temporary holding variable for the user realm.
+	tempRealm Realm
+	connID    string
+	connToken string
 }
 
 func (c *Client) sendError(err error) {
@@ -197,8 +199,16 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Error().Msg("path is missing")
 		return
 	}
+
+	connIDs, ok := r.URL.Query()["cid"]
+	if !ok || len(connIDs[0]) < 1 {
+		log.Error().Msg("connID is missing")
+		return
+	}
+
 	token := tokens[0]
 	path := paths[0]
+	connID := connIDs[0]
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -207,16 +217,27 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		hub:    hub,
-		conn:   conn,
-		send:   make(chan []byte, 256),
-		connID: shortuuid.New(),
+		hub:       hub,
+		conn:      conn,
+		send:      make(chan []byte, 256),
+		connID:    connID,
+		connToken: token,
 	}
-	err = hub.socketLogin(client, token)
+
+	// First, verify connection token
+	err = hub.socketLogin(client)
 	if err != nil {
 		log.Err(err).Msg("socket-login-error")
-		conn.Close()
+		client.conn.Close()
 		return
+	}
+
+	// Then try to register the realm with the connection path that was
+	// passed in.
+	err = registerRealm(client, path, hub)
+	if err != nil {
+		log.Err(err).Msg("register-realm-error")
+		client.conn.Close()
 	}
 
 	client.hub.register <- client
@@ -225,11 +246,5 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
-
-	//
-	err = registerRealm(client, path, hub)
-	if err != nil {
-		log.Err(err).Msg("register-realm-error")
-		conn.Close()
-	}
+	log.Debug().Str("connID", connID).Msg("leaving-servews")
 }

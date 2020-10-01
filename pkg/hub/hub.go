@@ -85,24 +85,39 @@ func (h *Hub) addClient(client *Client) error {
 	// This function is called from Run() and also indirectly from
 	// the ServeWS function, which runs in another goroutine.
 	// Therefore, we must protect the maps with a mutex.
-	h.realmMutex.Lock()
-	defer h.realmMutex.Unlock()
+	// h.realmMutex.Lock()
+	// defer h.realmMutex.Unlock()
 
-	h.clients[client] = client.realm
+	// Add client to appropriate maps
 	byUser := h.clientsByUserID[client.userID]
-
 	if byUser == nil {
 		h.clientsByUserID[client.userID] = make(map[*Client]bool)
 	}
+	// Add the new user ID to the map.
 	h.clientsByUserID[client.userID][client] = true
+	h.clients[client] = client.realm
 
-	return nil
+	// add to the realm map.
+	if client.tempRealm != NullRealm {
+		h.addToRealm(client.tempRealm, client)
+		client.tempRealm = NullRealm
+	}
+
+	// Meow, depending on the realm, request that the API publish
+	// initial information pertaining to this realm. For example,
+	// lobby visitors will want to see a list of sought games,
+	// or newcomers to a game realm will want to see the history
+	// of the game so far.
+	return h.sendRealmInitInfo(client.realm, client.userID)
+	// The API will publish the initial realm information to this user's channel.
+	// (user.userID - see pubsub.go)
+
 }
 
 func (h *Hub) removeClient(c *Client) error {
 	// no need to protect with mutex, only called from
 	// single-threaded Run
-	log.Debug().Str("client", c.username).Str("userid", c.userID).Msg("removing client")
+	log.Debug().Str("client", c.username).Str("connid", c.connID).Str("userid", c.userID).Msg("removing client")
 	close(c.send)
 
 	realm := h.clients[c]
@@ -118,7 +133,7 @@ func (h *Hub) removeClient(c *Client) error {
 	}
 
 	delete(h.realms[realm], c)
-	log.Debug().Msgf("deleted client from realm %v. New length %v", realm, len(
+	log.Debug().Msgf("deleted client %v from realm %v. New length %v", c.connID, realm, len(
 		h.realms[realm]))
 
 	if len(h.realms[realm]) == 0 {
@@ -126,7 +141,7 @@ func (h *Hub) removeClient(c *Client) error {
 	}
 
 	delete(h.clients, c)
-	log.Debug().Msgf("deleted client from clients. New length %v", len(
+	log.Debug().Msgf("deleted client %v from clients. New length %v", c.connID, len(
 		h.clients))
 
 	// xxx: trigger leaveSite even if this isn't the last tab. We would
@@ -206,6 +221,8 @@ func (h *Hub) Run() {
 			for client := range h.realms[message.realm] {
 				select {
 				// XXX: got a panic: send on closed channel from this line:
+				// I think this is because the client wasn't done registering
+				// (register-realm-path) before it was disconnected abnormally.
 				case client.send <- message.msg:
 				default:
 					h.removeClient(client)
@@ -233,20 +250,10 @@ func (h *Hub) Run() {
 	}
 }
 
-// since addToRealm can be called multithreaded, we must protect the map with
-// a mutex.
 func (h *Hub) addToRealm(realm Realm, client *Client) {
 	// adding to a realm means we must remove from another realm, since a client
 	// can only be in one realm at once. We cannot have the realm map hold on
 	// to stale clients in memory!
-
-	if client.realm == realm {
-		log.Info().Str("realm", string(realm)).Msg("user already in realm")
-		return
-	}
-
-	h.realmMutex.Lock()
-	defer h.realmMutex.Unlock()
 
 	if client.realm != NullRealm {
 		log.Debug().Msgf("before adding to realm %v, deleting from realm %v",
@@ -272,9 +279,9 @@ func (h *Hub) addToRealm(realm Realm, client *Client) {
 	h.clients[client] = realm
 }
 
-func (h *Hub) socketLogin(c *Client, tokenString string) error {
+func (h *Hub) socketLogin(c *Client) error {
 
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(c.connToken, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -293,16 +300,8 @@ func (h *Hub) socketLogin(c *Client, tokenString string) error {
 		if !ok {
 			return errors.New("malformed token - unn")
 		}
-		h.realmMutex.Lock()
 
 		c.userID = claims["uid"].(string)
-		byUser := h.clientsByUserID[c.userID]
-		if byUser == nil {
-			h.clientsByUserID[c.userID] = make(map[*Client]bool)
-		}
-		// Add the new user ID to the map.
-		h.clientsByUserID[c.userID][c] = true
-		h.realmMutex.Unlock()
 		log.Debug().Str("username", c.username).Str("userID", c.userID).
 			Bool("auth", c.authenticated).Msg("socket connection")
 	}
@@ -315,19 +314,18 @@ func (h *Hub) socketLogin(c *Client, tokenString string) error {
 	return err
 }
 
+// Note: This is a BLOCKING call -- see natsconn.Request below.
 func registerRealm(c *Client, path string, h *Hub) error {
 	// There are a variety of possible realms that a person joining a game
 	// can be in. We should not trust the user to send the right realm
 	// (for example they can send a TV mode realm if they're a player
 	// in the game or vice versa). The backend should determine the right realm
 	// and assign it accordingly.
-	log.Debug().Str("path", path).Msg("register-realm-path")
+	log.Debug().Str("connid", c.connID).Str("path", path).Msg("register-realm-path")
 	var realm string
 
-	// if strings.HasPrefix(path, )
 	if path == "/" {
 		// This is the lobby; no need to request a realm.
-		h.addToRealm(LobbyRealm, c)
 		realm = string(LobbyRealm)
 	} else {
 		// First, create a request and send to the IPC api:
@@ -351,24 +349,16 @@ func registerRealm(c *Client, path string, h *Hub) error {
 			return err
 		}
 		realm = rrResp.Realm
-		if Realm(realm) != NullRealm {
-			// Only add to the realm that the API says to add to.
-			h.addToRealm(Realm(realm), c)
-		}
 	}
-	// Meow, depending on the realm, request that the API publish
-	// initial information pertaining to this realm. For example,
-	// lobby visitors will want to see a list of sought games,
-	// or newcomers to a game realm will want to see the history
-	// of the game so far.
-	return h.sendRealmInitInfo(realm, c.userID)
-	// The API will publish the initial realm information to this user's channel.
-	// (user.userID - see pubsub.go)
+
+	c.tempRealm = Realm(realm)
+	return nil
+
 }
 
-func (h *Hub) sendRealmInitInfo(realm string, userID string) error {
+func (h *Hub) sendRealmInitInfo(realm Realm, userID string) error {
 	req := &pb.InitRealmInfo{
-		Realm:  realm,
+		Realm:  string(realm),
 		UserId: userID,
 	}
 	data, err := proto.Marshal(req)
