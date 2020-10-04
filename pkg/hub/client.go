@@ -5,6 +5,7 @@ package sockets
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	// "github.com/domino14/liwords/pkg/entity"
@@ -42,6 +43,7 @@ var upgrader = websocket.Upgrader{
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
+	sync.RWMutex
 	hub *Hub
 
 	// The websocket connection.
@@ -114,8 +116,9 @@ func (c *Client) readPump() {
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error {
 		received := time.Now()
-
+		c.RLock()
 		curlag := received.Sub(c.lastPingSent)
+		c.RUnlock()
 		c.pongCount++
 		var mix float64
 		// Decaying average after the first four pongs. Thx lichess.
@@ -211,7 +214,9 @@ func (c *Client) writePump() {
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
+			c.Lock()
 			c.lastPingSent = time.Now()
+			c.Unlock()
 		}
 	}
 }
