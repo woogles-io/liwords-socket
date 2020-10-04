@@ -20,10 +20,10 @@ const (
 	writeWait = 10 * time.Second
 
 	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	pongWait = 15 * time.Second
 
 	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
+	pingPeriod = 5 * time.Second
 
 	// Maximum message size allowed from peer.
 	maxMessageSize = 512
@@ -69,6 +69,11 @@ type Client struct {
 	tempRealm Realm
 	connID    string
 	connToken string
+
+	pongCount    int
+	lastPingSent time.Time
+	// The round-trip lag; it is a sort of average.
+	avglag time.Duration
 }
 
 func (c *Client) sendError(err error) {
@@ -77,6 +82,19 @@ func (c *Client) sendError(err error) {
 	if err != nil {
 		// This really shouldn't happen.
 		log.Err(err).Msg("error serializing error, lol")
+		return
+	}
+	c.send <- bts
+}
+
+func (c *Client) sendLatency() {
+	evt := entity.WrapEvent(
+		&pb.LagMeasurement{LagMs: int32(c.avglag / time.Millisecond)},
+		pb.MessageType_LAG_MEASUREMENT)
+	bts, err := evt.Serialize()
+	if err != nil {
+		// This really shouldn't happen.
+		log.Err(err).Msg("error serializing lag...")
 		return
 	}
 	c.send <- bts
@@ -94,7 +112,31 @@ func (c *Client) readPump() {
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetPongHandler(func(string) error {
+		received := time.Now()
+
+		curlag := received.Sub(c.lastPingSent)
+		c.pongCount++
+		var mix float64
+		// Decaying average after the first four pongs. Thx lichess.
+		if c.pongCount > 4 {
+			mix = 0.1
+		} else {
+			mix = 1 / float64(c.pongCount)
+		}
+		c.avglag += time.Duration(mix * (float64(curlag) - float64(c.avglag)))
+
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		if c.pongCount%10 == 2 {
+			log.Debug().Float64("curlag-ms", float64(curlag)/float64(time.Millisecond)).
+				Float64("avglag-ms", float64(c.avglag)/float64(time.Millisecond)).
+				Str("username", c.username).
+				Int("pong-count", c.pongCount).
+				Msg("got-pong")
+		}
+		c.sendLatency()
+		return nil
+	})
 	for {
 		// _, message, err
 		_, message, err := c.conn.ReadMessage()
@@ -169,6 +211,7 @@ func (c *Client) writePump() {
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
+			c.lastPingSent = time.Now()
 		}
 	}
 }

@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"expvar"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -52,6 +55,10 @@ func main() {
 	}
 	go h.Run()
 
+	expvar.Publish("goroutines", expvar.Func(func() interface{} {
+		return fmt.Sprintf("%d", runtime.NumGoroutine())
+	}))
+
 	router := http.NewServeMux() // here you could also go with third party packages to create a router
 
 	router.Handle("/ping", http.HandlerFunc(pingEndpoint))
@@ -59,6 +66,8 @@ func main() {
 	router.Handle("/ws", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sockets.ServeWS(h, w, r)
 	}))
+
+	router.Handle("/debug/vars", http.DefaultServeMux)
 
 	srv := &http.Server{
 		Addr:         cfg.WebsocketAddress,

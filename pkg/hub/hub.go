@@ -306,7 +306,7 @@ func (h *Hub) socketLogin(c *Client) error {
 			Bool("auth", c.authenticated).Msg("socket connection")
 	}
 	if err != nil {
-		log.Err(err).Msg("socket-login-failure")
+		log.Err(err).Str("token", c.connToken).Msg("socket-login-failure")
 	}
 	if !token.Valid {
 		return errors.New("invalid token")
