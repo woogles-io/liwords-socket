@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/domino14/liwords-socket/pkg/config"
@@ -21,6 +22,8 @@ type Realm string
 
 const NullRealm Realm = ""
 const LobbyRealm Realm = "lobby"
+
+const ConnPollPeriod = 60 * time.Second
 
 // A RealmMessage is a message that should be sent to a socket Realm.
 type RealmMessage struct {
@@ -179,21 +182,22 @@ func (h *Hub) sendToRealm(realm Realm, msg []byte) error {
 }
 
 func (h *Hub) sendToUser(userID string, msg []byte) error {
-	log.Debug().
-		Str("userid", userID).
-		Msg("sending to all user sockets")
 	h.broadcastUser <- UserMessage{userID: userID, msg: msg}
 	return nil
 }
 
 func (h *Hub) sendToUserChannel(userID string, msg []byte, channel string) error {
-	log.Debug().Str("userid", userID).Str("channel", channel).Msg("sending to channel sockets")
 	h.broadcastUser <- UserMessage{userID: userID, msg: msg, channel: channel}
 	return nil
 }
 
 func (h *Hub) Run() {
 	go h.PubsubProcess()
+	ticker := time.NewTicker(ConnPollPeriod)
+	defer func() {
+		ticker.Stop()
+	}()
+
 	for {
 		select {
 		case client := <-h.register:
@@ -246,6 +250,11 @@ func (h *Hub) Run() {
 					h.removeClient(client)
 				}
 			}
+
+		case <-ticker.C:
+			log.Info().Int("num-conns", len(h.clients)).
+				Int("num-users", len(h.clientsByUserID)).
+				Int("num-realms", len(h.realms)).Msg("conn-stats")
 		}
 	}
 }

@@ -202,9 +202,6 @@ func (c *Client) writePump() {
 			for i := 0; i < n; i++ {
 				w.Write(<-c.send)
 			}
-			if n > 0 {
-				log.Debug().Int("msgs", n).Msg("wrote-additional-msgs")
-			}
 
 			if err := w.Close(); err != nil {
 				return

@@ -74,7 +74,7 @@ func (h *Hub) PubsubProcess() {
 		case msg := <-h.pubsub.subchans["user.>"]:
 			// If we get a user message, we should send it along to the given
 			// user.
-			log.Debug().Str("topic", msg.Subject).Msg("got user message, forwarding along")
+			log.Debug().Str("topic", msg.Subject).Int("type", int(msg.Data[2])).Msg("got user message, forwarding along")
 			subtopics := strings.SplitN(msg.Subject, ".", 3)
 			if len(subtopics) < 2 {
 				log.Error().Msgf("user subtopics weird %v", msg.Subject)
