@@ -63,7 +63,7 @@ type Client struct {
 	// - lobby
 	// - game-gameid   -- A realm just for the two players of a game.
 	// - gametv-gameid -- A realm for observers of a game.
-	// - tourney-tourneyid -- A realm for a tourney "room", with its own chat room and standings
+	// - tournament-tourneyid -- A realm for a tourney "room", with its own chat room and standings
 	// If you want to join multiple realms, use multiple tabs (although, that's not a use
 	// case we necessarily want to encourage)
 	realm Realm

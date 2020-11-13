@@ -336,6 +336,15 @@ func registerRealm(c *Client, path string, h *Hub) error {
 	if path == "/" {
 		// This is the lobby; no need to request a realm.
 		realm = string(LobbyRealm)
+	} else if strings.HasPrefix(path, "/tournament") {
+		// FOR NOW: do this. In the future, once tourneys are ready, this should
+		// call out to the liwords-api to make sure the tournament ID exists
+		// in the database.
+		realm = strings.TrimPrefix(path, "/tournament")
+		if len(realm) > 0 {
+			realm = "tournament-" + strings.TrimPrefix(realm, "/")
+		}
+		log.Debug().Str("realm", realm).Msg("tournament-realm")
 	} else {
 		// First, create a request and send to the IPC api:
 		rrr := &pb.RegisterRealmRequest{}

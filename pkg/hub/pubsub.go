@@ -34,6 +34,8 @@ func newPubSub(natsURL string) (*PubSub, error) {
 		"gametv.>",
 		// private game messages: only for the players of a game.
 		"game.>",
+		// tourneys
+		"tournament.>",
 	}
 	pubSub := &PubSub{
 		natsconn:      natsconn,
@@ -70,6 +72,17 @@ func (h *Hub) PubsubProcess() {
 				continue
 			}
 			h.sendToRealm(LobbyRealm, msg.Data)
+
+		case msg := <-h.pubsub.subchans["tournament.>"]:
+			log.Debug().Str("topic", msg.Subject).Int("type", int(msg.Data[2])).Msg("got tournament message, forwarding along")
+
+			subtopics := strings.Split(msg.Subject, ".")
+			if len(subtopics) < 2 {
+				log.Error().Msgf("tournament subtopics weird %v", msg.Subject)
+				continue
+			}
+			tournamentID := subtopics[1]
+			h.sendToRealm(Realm("tournament-"+tournamentID), msg.Data)
 
 		case msg := <-h.pubsub.subchans["user.>"]:
 			// If we get a user message, we should send it along to the given
