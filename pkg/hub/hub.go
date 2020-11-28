@@ -43,7 +43,7 @@ type UserMessage struct {
 // clients.
 type Hub struct {
 	// Registered clients.
-	clients         map[*Client]Realm
+	clients         map[*Client][]Realm
 	clientsByUserID map[string]map[*Client]bool
 
 	// Inbound messages from the clients.
@@ -77,7 +77,7 @@ func NewHub(cfg *config.Config) (*Hub, error) {
 		broadcastUser:   make(chan UserMessage),
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
-		clients:         make(map[*Client]Realm),
+		clients:         make(map[*Client][]Realm),
 		clientsByUserID: make(map[string]map[*Client]bool),
 		realms:          make(map[Realm]map[*Client]bool),
 		pubsub:          pubsub,
@@ -85,11 +85,6 @@ func NewHub(cfg *config.Config) (*Hub, error) {
 }
 
 func (h *Hub) addClient(client *Client) error {
-	// This function is called from Run() and also indirectly from
-	// the ServeWS function, which runs in another goroutine.
-	// Therefore, we must protect the maps with a mutex.
-	// h.realmMutex.Lock()
-	// defer h.realmMutex.Unlock()
 
 	// Add client to appropriate maps
 	byUser := h.clientsByUserID[client.userID]
@@ -98,20 +93,17 @@ func (h *Hub) addClient(client *Client) error {
 	}
 	// Add the new user ID to the map.
 	h.clientsByUserID[client.userID][client] = true
-	h.clients[client] = client.realm
 
 	// add to the realm map.
-	if client.tempRealm != NullRealm {
-		h.addToRealm(client.tempRealm, client)
-		client.tempRealm = NullRealm
-	}
+	h.addToRealm(client.tempRealms, client)
+	client.tempRealms = []string{}
 
 	// Meow, depending on the realm, request that the API publish
 	// initial information pertaining to this realm. For example,
 	// lobby visitors will want to see a list of sought games,
 	// or newcomers to a game realm will want to see the history
 	// of the game so far.
-	return h.sendRealmInitInfo(client.realm, client.userID)
+	return h.sendRealmInitInfo(client.realms, client.userID)
 	// The API will publish the initial realm information to this user's channel.
 	// (user.userID - see pubsub.go)
 
@@ -123,24 +115,16 @@ func (h *Hub) removeClient(c *Client) error {
 	log.Debug().Str("client", c.username).Str("connid", c.connID).Str("userid", c.userID).Msg("removing client")
 	close(c.send)
 
-	realm := h.clients[c]
-	if c.realm != realm {
-		// There is a problem here. If this line triggers then we will delete
-		// the client from the wrong map -- somewhere the client might not actually
-		// be. This will cause a panic if we then try to send data to the client
-		// on a closed channel.
-		log.Error().Str("realm", string(realm)).Str("c.realm", string(c.realm)).
-			Msg("client realm doesn't match")
-		// Try deleting from c.realm map just in case
-		delete(h.realms[c.realm], c)
-	}
+	realms := h.clients[c]
 
-	delete(h.realms[realm], c)
-	log.Debug().Msgf("deleted client %v from realm %v. New length %v", c.connID, realm, len(
-		h.realms[realm]))
+	for _, realm := range realms {
+		delete(h.realms[realm], c)
+		log.Debug().Msgf("deleted client %v from realm %v. New length %v", c.connID, realm, len(
+			h.realms[realm]))
 
-	if len(h.realms[realm]) == 0 {
-		delete(h.realms, realm)
+		if len(h.realms[realm]) == 0 {
+			delete(h.realms, realm)
+		}
 	}
 
 	delete(h.clients, c)
@@ -191,6 +175,14 @@ func (h *Hub) sendToUserChannel(userID string, msg []byte, channel string) error
 	return nil
 }
 
+func realmToChannel(realm Realm) string {
+	return strings.ReplaceAll(string(realm), "-", ".")
+}
+
+func channelToRealm(channel string) Realm {
+	return Realm(strings.ReplaceAll(channel, ".", "-"))
+}
+
 func (h *Hub) Run() {
 	go h.PubsubProcess()
 	ticker := time.NewTicker(ConnPollPeriod)
@@ -229,6 +221,7 @@ func (h *Hub) Run() {
 				// (register-realm-path) before it was disconnected abnormally.
 				case client.send <- message.msg:
 				default:
+					log.Debug().Str("username", client.username).Msg("in broadcastRealm, removeClient")
 					h.removeClient(client)
 				}
 			}
@@ -238,15 +231,26 @@ func (h *Hub) Run() {
 				Msg("sending to all user sockets")
 			// Send the message to every socket belonging to this user.
 			for client := range h.clientsByUserID[message.userID] {
-				realmToChannel := strings.ReplaceAll(string(client.realm), "-", ".")
-				if message.channel != "" && !strings.HasPrefix(message.channel, realmToChannel) {
-					// if the message has a channel attached to it, it needs to be
-					// a prefix of the realm in order to be delivered.
+				canSend := true
+				if message.channel != "" {
+					canSend = false
+					// Determine if we can send this message to this client.
+					for _, realm := range client.realms {
+						if strings.HasPrefix(message.channel, realmToChannel(realm)) {
+							// if the message has a channel attached to it, it needs to be
+							// a prefix of the realm in order to be delivered.
+							canSend = true
+							break
+						}
+					}
+				}
+				if !canSend {
 					continue
 				}
 				select {
 				case client.send <- message.msg:
 				default:
+					log.Debug().Str("username", client.username).Msg("in broadcastUser, removeClient")
 					h.removeClient(client)
 				}
 			}
@@ -259,33 +263,22 @@ func (h *Hub) Run() {
 	}
 }
 
-func (h *Hub) addToRealm(realm Realm, client *Client) {
-	// adding to a realm means we must remove from another realm, since a client
-	// can only be in one realm at once. We cannot have the realm map hold on
-	// to stale clients in memory!
+func (h *Hub) addToRealm(realms []string, client *Client) {
+	// a client can be in a set of realms, but these realms are basically
+	// immutable (for now). If the client wants to change realms, we have
+	// to create new client connection.
 
-	if client.realm != NullRealm {
-		log.Debug().Msgf("before adding to realm %v, deleting from realm %v",
-			realm, client.realm)
-		if h.realms[client.realm] != nil {
-			delete(h.realms[client.realm], client)
-		} else {
-			log.Error().Str("realm", string(client.realm)).Msg("tried to delete a from a null realm")
+	h.clients[client] = []Realm{}
+	for _, realm := range realms {
+		realm := Realm(realm)
+		if h.realms[realm] == nil {
+			h.realms[realm] = make(map[*Client]bool)
 		}
-		if len(h.realms[client.realm]) == 0 {
-			delete(h.realms, client.realm)
-		}
+		client.realms = append(client.realms, realm)
+		h.realms[realm][client] = true
+		h.clients[client] = append(h.clients[client], realm)
 	}
 
-	// Now add to the given realm.
-
-	// log.Debug().Msgf("h.reamls[realm] %v (%v) %v", h.realms, realm, h.realms[realm])
-	if h.realms[realm] == nil {
-		h.realms[realm] = make(map[*Client]bool)
-	}
-	client.realm = realm
-	h.realms[realm][client] = true
-	h.clients[client] = realm
 }
 
 func (h *Hub) socketLogin(c *Client) error {
@@ -331,24 +324,25 @@ func registerRealm(c *Client, path string, h *Hub) error {
 	// in the game or vice versa). The backend should determine the right realm
 	// and assign it accordingly.
 	log.Debug().Str("connid", c.connID).Str("path", path).Msg("register-realm-path")
-	var realm string
+	var realms []string
 
 	if path == "/" {
 		// This is the lobby; no need to request a realm.
-		realm = string(LobbyRealm)
+		realms = []string{string(LobbyRealm), "chat-" + string(LobbyRealm)}
 	} else if strings.HasPrefix(path, "/tournament") {
 		// FOR NOW: do this. In the future, once tourneys are ready, this should
 		// call out to the liwords-api to make sure the tournament ID exists
 		// in the database.
-		realm = strings.TrimPrefix(path, "/tournament")
-		if len(realm) > 0 {
-			realm = "tournament-" + strings.TrimPrefix(realm, "/")
+		potentialRealm := strings.TrimSpace(strings.TrimPrefix(path, "/tournament"))
+		if len(potentialRealm) > 0 {
+			tid := strings.TrimPrefix(potentialRealm, "/")
+			realms = append(realms, "tournament-"+tid)
+			realms = append(realms, "chat-tournament-"+tid)
 		}
-		log.Debug().Str("realm", realm).Msg("tournament-realm")
 	} else {
 		// First, create a request and send to the IPC api:
 		rrr := &pb.RegisterRealmRequest{}
-		rrr.Realm = path
+		rrr.Path = path
 		rrr.UserId = c.userID
 		data, err := proto.Marshal(rrr)
 		if err != nil {
@@ -366,24 +360,33 @@ func registerRealm(c *Client, path string, h *Hub) error {
 		if err != nil {
 			return err
 		}
-		realm = rrResp.Realm
+		realms = rrResp.Realms
 	}
+	log.Debug().Interface("realms", realms).Msg("setting-realms")
 
-	c.tempRealm = Realm(realm)
+	c.tempRealms = realms
 	return nil
-
 }
 
-func (h *Hub) sendRealmInitInfo(realm Realm, userID string) error {
-	req := &pb.InitRealmInfo{
-		Realm:  string(realm),
-		UserId: userID,
-	}
-	data, err := proto.Marshal(req)
-	if err != nil {
-		return err
-	}
-	log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
+func (h *Hub) sendRealmInitInfo(realms []Realm, userID string) error {
+	for _, realm := range realms {
+		if string(realm) == "" {
+			continue
+		}
+		req := &pb.InitRealmInfo{
+			Realm:  string(realm),
+			UserId: userID,
+		}
+		data, err := proto.Marshal(req)
+		if err != nil {
+			return err
+		}
+		log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
 
-	return h.pubsub.natsconn.Publish("ipc.pb.initRealmInfo", data)
+		err = h.pubsub.natsconn.Publish("ipc.pb.initRealmInfo", data)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -36,6 +36,8 @@ func newPubSub(natsURL string) (*PubSub, error) {
 		"game.>",
 		// tourneys
 		"tournament.>",
+		// chats
+		"chat.>",
 	}
 	pubSub := &PubSub{
 		natsconn:      natsconn,
@@ -81,8 +83,7 @@ func (h *Hub) PubsubProcess() {
 				log.Error().Msgf("tournament subtopics weird %v", msg.Subject)
 				continue
 			}
-			tournamentID := subtopics[1]
-			h.sendToRealm(Realm("tournament-"+tournamentID), msg.Data)
+			h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
 
 		case msg := <-h.pubsub.subchans["user.>"]:
 			// If we get a user message, we should send it along to the given
@@ -135,6 +136,12 @@ func (h *Hub) PubsubProcess() {
 			}
 			gameID := subtopics[1]
 			h.sendToRealm(Realm("game-"+gameID), msg.Data)
+
+		case msg := <-h.pubsub.subchans["chat.>"]:
+			log.Debug().Str("topic", msg.Subject).Msg("chat-msg")
+			h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
+
 		}
+
 	}
 }
