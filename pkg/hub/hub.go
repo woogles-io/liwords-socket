@@ -103,7 +103,7 @@ func (h *Hub) addClient(client *Client) error {
 	// lobby visitors will want to see a list of sought games,
 	// or newcomers to a game realm will want to see the history
 	// of the game so far.
-	return h.sendRealmInitInfo(client.realms, client.userID)
+	return h.sendRealmInitInfo(client)
 	// The API will publish the initial realm information to this user's channel.
 	// (user.userID - see pubsub.go)
 
@@ -368,14 +368,14 @@ func registerRealm(c *Client, path string, h *Hub) error {
 	return nil
 }
 
-func (h *Hub) sendRealmInitInfo(realms []Realm, userID string) error {
-	for _, realm := range realms {
+func (h *Hub) sendRealmInitInfo(c *Client) error {
+	for _, realm := range c.realms {
 		if string(realm) == "" {
 			continue
 		}
 		req := &pb.InitRealmInfo{
 			Realm:  string(realm),
-			UserId: userID,
+			UserId: c.userID,
 		}
 		data, err := proto.Marshal(req)
 		if err != nil {
@@ -383,7 +383,7 @@ func (h *Hub) sendRealmInitInfo(realms []Realm, userID string) error {
 		}
 		log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
 
-		err = h.pubsub.natsconn.Publish("ipc.pb.initRealmInfo", data)
+		err = h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.initRealmInfo"), data)
 		if err != nil {
 			return err
 		}
