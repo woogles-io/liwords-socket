@@ -139,8 +139,16 @@ func (h *Hub) PubsubProcess() {
 
 		case msg := <-h.pubsub.subchans["chat.>"]:
 			log.Debug().Str("topic", msg.Subject).Msg("chat-msg")
-			h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
-
+			if strings.HasPrefix(msg.Subject, "chat.pm.") {
+				// This is a private message. Send to each recipient.
+				recipients := strings.Split(strings.TrimPrefix(msg.Subject, "chat.pm."), "_")
+				log.Debug().Interface("recipients", recipients).Msg("private-message")
+				for _, r := range recipients {
+					h.sendToUser(r, msg.Data)
+				}
+			} else {
+				h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
+			}
 		}
 
 	}
