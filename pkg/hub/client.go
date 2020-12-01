@@ -132,11 +132,16 @@ func (c *Client) readPump() {
 				Str("username", c.username).
 				Int("pong-count", c.pongCount).
 				Msg("got-pong")
-		} else {
-			// This might be too noisy even for debug but let's enable this
-			// for a bit.
-			log.Debug().Str("username", c.username).Msg("single-pong")
-		}
+
+			// Also, send a message via NATS to renew presence channel expirations.
+			// Let's do this every 10 pings instead of every ping. We don't need
+			// to stress Redis that often.
+			c.hub.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.pongReceived"), []byte{})
+		} //else {
+		// This might be too noisy even for debug but let's enable this
+		// for a bit.
+		//log.Debug().Str("username", c.username).Msg("single-pong")
+		//}
 		c.sendLatency()
 		return nil
 	})
