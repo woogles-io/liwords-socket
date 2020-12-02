@@ -156,11 +156,6 @@ func (h *Hub) removeClient(c *Client) error {
 }
 
 func (h *Hub) sendToRealm(realm Realm, msg []byte) error {
-	log.Debug().
-		Str("realm", string(realm)).
-		Int("inrealm", len(h.realms[realm])).
-		Msg("sending to realm")
-
 	h.broadcastRealm <- RealmMessage{realm: realm, msg: msg}
 	return nil
 }
@@ -329,16 +324,6 @@ func registerRealm(c *Client, path string, h *Hub) error {
 	if path == "/" {
 		// This is the lobby; no need to request a realm.
 		realms = []string{string(LobbyRealm), "chat-" + string(LobbyRealm)}
-	} else if strings.HasPrefix(path, "/tournament") {
-		// FOR NOW: do this. In the future, once tourneys are ready, this should
-		// call out to the liwords-api to make sure the tournament ID exists
-		// in the database.
-		potentialRealm := strings.TrimSpace(strings.TrimPrefix(path, "/tournament"))
-		if len(potentialRealm) > 0 {
-			tid := strings.TrimPrefix(potentialRealm, "/")
-			realms = append(realms, "tournament-"+tid)
-			realms = append(realms, "chat-tournament-"+tid)
-		}
 	} else {
 		// First, create a request and send to the IPC api:
 		rrr := &pb.RegisterRealmRequest{}
