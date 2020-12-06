@@ -39,13 +39,19 @@ type UserMessage struct {
 	msg     []byte
 }
 
+// A ConnMessage is a message that just gets sent to a single socket connection.
+type ConnMessage struct {
+	connID string
+	msg    []byte
+}
+
 // Hub maintains the set of active clients and broadcasts messages to the
 // clients.
 type Hub struct {
 	// Registered clients.
 	clients         map[*Client][]Realm
 	clientsByUserID map[string]map[*Client]bool
-
+	clientsByConnID map[string]*Client
 	// Inbound messages from the clients.
 	// broadcast chan []byte
 
@@ -61,8 +67,9 @@ type Hub struct {
 	// Each realm has a list of clients in it.
 	realms map[Realm]map[*Client]bool
 
-	broadcastRealm chan RealmMessage
-	broadcastUser  chan UserMessage
+	broadcastRealm  chan RealmMessage
+	broadcastUser   chan UserMessage
+	sendConnMessage chan ConnMessage
 }
 
 func NewHub(cfg *config.Config) (*Hub, error) {
@@ -75,10 +82,12 @@ func NewHub(cfg *config.Config) (*Hub, error) {
 		// broadcast:         make(chan []byte),
 		broadcastRealm:  make(chan RealmMessage),
 		broadcastUser:   make(chan UserMessage),
+		sendConnMessage: make(chan ConnMessage),
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
 		clients:         make(map[*Client][]Realm),
 		clientsByUserID: make(map[string]map[*Client]bool),
+		clientsByConnID: make(map[string]*Client),
 		realms:          make(map[Realm]map[*Client]bool),
 		pubsub:          pubsub,
 	}, nil
@@ -93,7 +102,7 @@ func (h *Hub) addClient(client *Client) error {
 	}
 	// Add the new user ID to the map.
 	h.clientsByUserID[client.userID][client] = true
-
+	h.clientsByConnID[client.connID] = client
 	// add to the realm map.
 	h.addToRealm(client.tempRealms, client)
 	client.tempRealms = []string{}
@@ -152,11 +161,17 @@ func (h *Hub) removeClient(c *Client) error {
 	log.Debug().Interface("userid", c.userID).Int("numconn", len(h.clientsByUserID[c.userID])).
 		Msg("non-one-num-conns")
 	delete(h.clientsByUserID[c.userID], c)
+	delete(h.clientsByConnID, c.connID)
 	return nil
 }
 
 func (h *Hub) sendToRealm(realm Realm, msg []byte) error {
 	h.broadcastRealm <- RealmMessage{realm: realm, msg: msg}
+	return nil
+}
+
+func (h *Hub) sendToConnID(connID string, msg []byte) error {
+	h.sendConnMessage <- ConnMessage{connID: connID, msg: msg}
 	return nil
 }
 
@@ -248,6 +263,15 @@ func (h *Hub) Run() {
 					log.Debug().Str("username", client.username).Msg("in broadcastUser, removeClient")
 					h.removeClient(client)
 				}
+			}
+
+		case message := <-h.sendConnMessage:
+			c := h.clientsByConnID[message.connID]
+			select {
+			case c.send <- message.msg:
+			default:
+				log.Debug().Str("connID", message.connID).Msg("in sendToConnID, removeClient")
+				h.removeClient(c)
 			}
 
 		case <-ticker.C:
