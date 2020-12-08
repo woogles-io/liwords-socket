@@ -378,24 +378,26 @@ func registerRealm(c *Client, path string, h *Hub) error {
 }
 
 func (h *Hub) sendRealmInitInfo(c *Client) error {
-	for _, realm := range c.realms {
-		if string(realm) == "" {
-			continue
-		}
-		req := &pb.InitRealmInfo{
-			Realm:  string(realm),
-			UserId: c.userID,
-		}
-		data, err := proto.Marshal(req)
-		if err != nil {
-			return err
-		}
-		log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
 
-		err = h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.initRealmInfo"), data)
-		if err != nil {
-			return err
+	realms := []string{}
+	for _, r := range c.realms {
+		if r != "" {
+			realms = append(realms, string(r))
 		}
 	}
-	return nil
+
+	req := &pb.InitRealmInfo{
+		Realms: realms,
+		UserId: c.userID,
+	}
+
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	log.Debug().Interface("initRealmInfo", req).Msg("req-init-realm-info")
+
+	return h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.initRealmInfo"), data)
+
 }
