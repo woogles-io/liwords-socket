@@ -26,6 +26,8 @@ func newPubSub(natsURL string) (*PubSub, error) {
 	topics := []string{
 		// lobby messages:
 		"lobby.>",
+		// for specific connections
+		"connid.>",
 		// user messages
 		"user.>",
 		// usertv messages; for when someone is watching a user's games
@@ -36,6 +38,8 @@ func newPubSub(natsURL string) (*PubSub, error) {
 		"game.>",
 		// tourneys
 		"tournament.>",
+		// chats
+		"chat.>",
 	}
 	pubSub := &PubSub{
 		natsconn:      natsconn,
@@ -81,8 +85,7 @@ func (h *Hub) PubsubProcess() {
 				log.Error().Msgf("tournament subtopics weird %v", msg.Subject)
 				continue
 			}
-			tournamentID := subtopics[1]
-			h.sendToRealm(Realm("tournament-"+tournamentID), msg.Data)
+			h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
 
 		case msg := <-h.pubsub.subchans["user.>"]:
 			// If we get a user message, we should send it along to the given
@@ -99,6 +102,17 @@ func (h *Hub) PubsubProcess() {
 			} else {
 				h.sendToUserChannel(userID, msg.Data, subtopics[2])
 			}
+
+		case msg := <-h.pubsub.subchans["connid.>"]:
+			// Forward to the given connection ID only.
+			log.Debug().Str("topic", msg.Subject).Int("type", int(msg.Data[2])).Msg("got connID message, forwarding along")
+			subtopics := strings.Split(msg.Subject, ".")
+			if len(subtopics) < 2 {
+				log.Error().Msgf("connid subtopics weird %v", msg.Subject)
+				continue
+			}
+			connID := subtopics[1]
+			h.sendToConnID(connID, msg.Data)
 
 		case msg := <-h.pubsub.subchans["usertv.>"]:
 			// XXX: This might not really work. We should only send to gametv
@@ -135,6 +149,20 @@ func (h *Hub) PubsubProcess() {
 			}
 			gameID := subtopics[1]
 			h.sendToRealm(Realm("game-"+gameID), msg.Data)
+
+		case msg := <-h.pubsub.subchans["chat.>"]:
+			log.Debug().Str("topic", msg.Subject).Msg("chat-msg")
+			if strings.HasPrefix(msg.Subject, "chat.pm.") {
+				// This is a private message. Send to each recipient.
+				recipients := strings.Split(strings.TrimPrefix(msg.Subject, "chat.pm."), "_")
+				log.Debug().Interface("recipients", recipients).Msg("private-message")
+				for _, r := range recipients {
+					h.sendToUser(r, msg.Data)
+				}
+			} else {
+				h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
+			}
 		}
+
 	}
 }

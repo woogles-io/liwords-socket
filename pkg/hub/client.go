@@ -57,20 +57,16 @@ type Client struct {
 	// userID is the user database ID, and it should contain solely of base57
 	// chars, so we should use it as much as possible.
 	userID string
-	// It makes things much easier if a client socket is only allowed to be in one
-	// single "realm" at a time. A realm is an abstract thing that is akin
-	// to a "chatroom". Some example realms:
+	// A realm is an abstract thing that is akin to a "chatroom". Some example realms:
 	// - lobby
 	// - game-gameid   -- A realm just for the two players of a game.
 	// - gametv-gameid -- A realm for observers of a game.
 	// - tournament-tourneyid -- A realm for a tourney "room", with its own chat room and standings
-	// If you want to join multiple realms, use multiple tabs (although, that's not a use
-	// case we necessarily want to encourage)
-	realm Realm
-	// tempRealm is a temporary holding variable for the user realm.
-	tempRealm Realm
-	connID    string
-	connToken string
+	realms []Realm
+	// tempRealms is a temporary holding variable for the user realms.
+	tempRealms []string
+	connID     string
+	connToken  string
 
 	pongCount    int
 	lastPingSent time.Time
@@ -136,7 +132,16 @@ func (c *Client) readPump() {
 				Str("username", c.username).
 				Int("pong-count", c.pongCount).
 				Msg("got-pong")
-		}
+
+			// Also, send a message via NATS to renew presence channel expirations.
+			// Let's do this every 10 pings instead of every ping. We don't need
+			// to stress Redis that often.
+			c.hub.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.pongReceived"), []byte{})
+		} //else {
+		// This might be too noisy even for debug but let's enable this
+		// for a bit.
+		//log.Debug().Str("username", c.username).Msg("single-pong")
+		//}
 		c.sendLatency()
 		return nil
 	})
@@ -148,7 +153,7 @@ func (c *Client) readPump() {
 				log.Err(err).Msg("unexpected-close")
 			}
 			// Probably a regular disconnect:
-			log.Debug().Err(err).Msg("other-error-breaking-out")
+			log.Debug().Str("username", c.username).Err(err).Msg("other-error-breaking-out")
 			break
 		}
 
