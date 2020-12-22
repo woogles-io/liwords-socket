@@ -85,7 +85,8 @@ func (h *Hub) PubsubProcess() {
 				log.Error().Msgf("tournament subtopics weird %v", msg.Subject)
 				continue
 			}
-			h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
+			tournamentID := subtopics[1]
+			h.sendToRealm(Realm("tournament-"+tournamentID), msg.Data)
 
 		case msg := <-h.pubsub.subchans["user.>"]:
 			// If we get a user message, we should send it along to the given
