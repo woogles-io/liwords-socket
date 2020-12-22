@@ -139,6 +139,7 @@ func (h *Hub) removeClient(c *Client) error {
 	delete(h.clients, c)
 	log.Debug().Msgf("deleted client %v from clients. New length %v", c.connID, len(
 		h.clients))
+	delete(h.clientsByConnID, c.connID)
 
 	// xxx: trigger leaveSite even if this isn't the last tab. We would
 	// pass in a conn ID of some sort. We would associate outgoing
@@ -161,7 +162,7 @@ func (h *Hub) removeClient(c *Client) error {
 	log.Debug().Interface("userid", c.userID).Int("numconn", len(h.clientsByUserID[c.userID])).
 		Msg("non-one-num-conns")
 	delete(h.clientsByUserID[c.userID], c)
-	delete(h.clientsByConnID, c.connID)
+
 	return nil
 }
 
@@ -266,12 +267,17 @@ func (h *Hub) Run() {
 			}
 
 		case message := <-h.sendConnMessage:
-			c := h.clientsByConnID[message.connID]
-			select {
-			case c.send <- message.msg:
-			default:
-				log.Debug().Str("connID", message.connID).Msg("in sendToConnID, removeClient")
-				h.removeClient(c)
+			c, ok := h.clientsByConnID[message.connID]
+			if !ok {
+				// This client does not exist in this node.
+				log.Debug().Str("connID", message.connID).Msg("connID-not-found")
+			} else {
+				select {
+				case c.send <- message.msg:
+				default:
+					log.Debug().Str("connID", message.connID).Msg("in sendToConnID, removeClient")
+					h.removeClient(c)
+				}
 			}
 
 		case <-ticker.C:
