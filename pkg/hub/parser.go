@@ -89,6 +89,12 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 			return err
 		}
 
+	case pb.MessageType_READY_FOR_TOURNAMENT_GAME:
+		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.readyForTournamentGame"), msg[3:])
+		if err != nil {
+			return err
+		}
+
 	default:
 		return fmt.Errorf("message type %v not yet handled", msg[2])
 	}
