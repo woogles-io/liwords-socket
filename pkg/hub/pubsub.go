@@ -40,6 +40,8 @@ func newPubSub(natsURL string) (*PubSub, error) {
 		"tournament.>",
 		// chats
 		"chat.>",
+		// generic channels
+		"channel.>",
 	}
 	pubSub := &PubSub{
 		natsconn:      natsconn,
@@ -163,6 +165,16 @@ func (h *Hub) PubsubProcess() {
 			} else {
 				h.sendToRealm(channelToRealm(msg.Subject), msg.Data)
 			}
+
+		case msg := <-h.pubsub.subchans["channel.>"]:
+			log.Debug().Str("topic", msg.Subject).Msg("channel-msg")
+			subtopics := strings.Split(msg.Subject, ".")
+			if len(subtopics) < 2 {
+				log.Error().Msgf("channel subtopics weird %v", msg.Subject)
+				continue
+			}
+			channelID := subtopics[1]
+			h.sendToRealm(Realm("channel-"+channelID), msg.Data)
 		}
 
 	}
