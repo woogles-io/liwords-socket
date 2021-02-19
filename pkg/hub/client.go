@@ -5,6 +5,7 @@ package sockets
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,6 +69,7 @@ type Client struct {
 	connID     string
 	connToken  string
 
+	forwardedFor string
 	pongCount    int
 	lastPingSent time.Time
 	// The round-trip lag; it is a sort of average.
@@ -131,6 +133,7 @@ func (c *Client) readPump() {
 				Float64("avglag-ms", float64(c.avglag)/float64(time.Millisecond)).
 				Str("username", c.username).
 				Int("pong-count", c.pongCount).
+				Str("ips", c.forwardedFor).
 				Msg("got-pong")
 
 			// Also, send a message via NATS to renew presence channel expirations.
@@ -265,13 +268,15 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Err(err).Msg("upgrading socket")
 		return
 	}
+	fwd := r.Header.Values("X-Forwarded-For")
 
 	client := &Client{
-		hub:       hub,
-		conn:      conn,
-		send:      make(chan []byte, 256),
-		connID:    connID,
-		connToken: token,
+		hub:          hub,
+		conn:         conn,
+		send:         make(chan []byte, 256),
+		connID:       connID,
+		connToken:    token,
+		forwardedFor: strings.Join(fwd, ","),
 	}
 
 	// First, verify connection token
