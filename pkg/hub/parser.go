@@ -2,7 +2,6 @@ package sockets
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
@@ -34,70 +33,10 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 	// (or they better be)
 
 	// The type byte is [2] ([0] and [1] are length of the packet)
-	switch pb.MessageType(msg[2]) {
 
-	case pb.MessageType_SEEK_REQUEST:
-		log.Debug().Msg("publishing seek request to NATS")
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.seekRequest"), msg[3:])
-		if err != nil {
-			return err
-		}
+	topicName := "ipc.pb." + pb.MessageType(msg[2]).String()
+	fullTopic := extendTopic(c, topicName)
+	log.Debug().Str("fullTopic", fullTopic).Msg("nats-publish")
 
-	case pb.MessageType_MATCH_REQUEST:
-		log.Debug().Msg("publishing match request to NATS")
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.matchRequest"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_DECLINE_MATCH_REQUEST:
-		log.Debug().Msg("publishing decline match request to NATS")
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.declineMatchRequest"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_SOUGHT_GAME_PROCESS_EVENT:
-		log.Debug().Msg("publishing sought game process to NATS")
-
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.soughtGameProcess"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_CLIENT_GAMEPLAY_EVENT:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.gameplayEvent"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_READY_FOR_GAME:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.readyForGame"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_CHAT_MESSAGE:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.chat"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_TIMED_OUT:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.timedOut"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	case pb.MessageType_READY_FOR_TOURNAMENT_GAME:
-		err := h.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.readyForTournamentGame"), msg[3:])
-		if err != nil {
-			return err
-		}
-
-	default:
-		return fmt.Errorf("message type %v not yet handled", msg[2])
-	}
-
-	return nil
+	return h.pubsub.natsconn.Publish(fullTopic, msg[3:])
 }
