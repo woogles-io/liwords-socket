@@ -2,9 +2,9 @@ package sockets
 
 import (
 	"context"
+	"strconv"
 	"time"
 
-	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
 	"github.com/rs/zerolog/log"
 )
 
@@ -34,7 +34,7 @@ func (h *Hub) parseAndExecuteMessage(ctx context.Context, msg []byte, c *Client)
 
 	// The type byte is [2] ([0] and [1] are length of the packet)
 
-	topicName := "ipc.pb." + pb.MessageType(msg[2]).String()
+	topicName := "ipc.pb." + strconv.Itoa(int(msg[2]))
 	fullTopic := extendTopic(c, topicName)
 	log.Debug().Str("fullTopic", fullTopic).Msg("nats-publish")
 
