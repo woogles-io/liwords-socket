@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	ipcTimeout = 2 * time.Second
+	ipcTimeout = 10 * time.Second
 )
 
 func extendTopic(c *Client, topic string) string {
