@@ -51,7 +51,7 @@ func newPubSub(natsURL string) (*PubSub, error) {
 	}
 	// Subscribe to the above topics.
 	for _, topic := range topics {
-		ch := make(chan *nats.Msg, 64)
+		ch := make(chan *nats.Msg, 640)
 		sub, err := natsconn.ChanSubscribe(topic, ch)
 		if err != nil {
 			return nil, err
