@@ -12,6 +12,7 @@ import (
 	// "github.com/domino14/liwords/pkg/entity"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/domino14/liwords/pkg/entity"
 	pb "github.com/domino14/liwords/rpc/api/proto/realtime"
@@ -134,12 +135,21 @@ func (c *Client) readPump() {
 				Str("username", c.username).
 				Int("pong-count", c.pongCount).
 				Str("ips", c.forwardedFor).
+				Str("connID", c.connID).
 				Msg("got-pong")
 
 			// Also, send a message via NATS to renew presence channel expirations.
 			// Let's do this every 10 pings instead of every ping. We don't need
 			// to stress Redis that often.
-			c.hub.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.pongReceived"), []byte{})
+			req := &pb.Pong{
+				Ips: c.forwardedFor,
+			}
+
+			data, err := proto.Marshal(req)
+			if err != nil {
+				return err
+			}
+			c.hub.pubsub.natsconn.Publish(extendTopic(c, "ipc.pb.pongReceived"), data)
 		} //else {
 		// This might be too noisy even for debug but let's enable this
 		// for a bit.
