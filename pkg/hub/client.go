@@ -252,7 +252,9 @@ func closeMessage(ws *websocket.Conn, errStr string) {
 // ServeWS handles websocket requests from the peer. This runs in its own
 // goroutine.
 func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
+	fwd := r.Header.Values("X-Forwarded-For")
 	tokens, ok := r.URL.Query()["token"]
+	log.Debug().Interface("ips", fwd).Msg("servews-new-conn")
 	if !ok || len(tokens[0]) < 1 {
 		log.Error().Msg("token is missing")
 		return
@@ -278,7 +280,6 @@ func ServeWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Err(err).Msg("upgrading socket")
 		return
 	}
-	fwd := r.Header.Values("X-Forwarded-For")
 
 	client := &Client{
 		hub:          hub,
