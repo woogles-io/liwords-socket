@@ -3,7 +3,7 @@
 # Check https://circleci.com/docs/2.0/language-go/ for more details
 version: 2.1
 orbs:
-  slack: circleci/slack@3.4.2
+  discord: antonioned/discord@0.1.0
 jobs:
   # We need to write some tests for socket server. For now we just create
   # a new docker image.
@@ -17,8 +17,8 @@ jobs:
           --build-arg BUILD_DATE=$(date -Iseconds -u)
           -t ghcr.io/domino14/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM} .
       - run: docker push ghcr.io/domino14/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}
-      - slack/status:
-          webhook: "${SLACK_WEBHOOK}"
+      - discord/status: &discord-webhook-setting
+          webhook: "${DISCORD_WEBHOOK}"
           success_message: ":tada: A $CIRCLE_JOB job has succeeded! (Branch: $CIRCLE_BRANCH)"
           failure_message: ":red_circle: A $CIRCLE_JOB job has failed! (Branch: $CIRCLE_BRANCH)"
 
