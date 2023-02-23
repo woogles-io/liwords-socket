@@ -5,6 +5,7 @@ package sockets
 import (
 	"context"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,19 @@ import (
 	"github.com/domino14/liwords/pkg/entity"
 	pb "github.com/domino14/liwords/rpc/api/proto/ipc"
 )
+
+var AllowedOrigins = []string{}
+
+func init() {
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins != "" {
+		for _, origin := range strings.Split(allowedOrigins, ",") {
+			origin = strings.TrimSpace(origin)
+			AllowedOrigins = append(AllowedOrigins, origin)
+		}
+	}
+	log.Info().Interface("AllowedOrigins", AllowedOrigins).Msg("set allowed origins")
+}
 
 const (
 	// Time allowed to write a message to the peer.
@@ -36,10 +50,17 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		log.Debug().Msgf("host header %v", r.Header.Get("Host"))
-		log.Debug().Msgf("origin %v", r.Header.Get("Origin"))
-		// XXX: FIX THIS
-		return true
+		if len(AllowedOrigins) == 0 {
+			return true
+		}
+		originHeader := r.Header.Get("Origin")
+		// https://woogles.io or https://www.woogles.io on production, for example.
+		for _, origin := range AllowedOrigins {
+			if originHeader == origin {
+				return true
+			}
+		}
+		return false
 	},
 }
 
@@ -246,7 +267,6 @@ func closeMessage(ws *websocket.Conn, errStr string) {
 		log.Err(err).Msg("writing close message back to user")
 	}
 	ws.Close()
-	return
 }
 
 // ServeWS handles websocket requests from the peer. This runs in its own
