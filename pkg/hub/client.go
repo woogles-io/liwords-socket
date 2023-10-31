@@ -151,7 +151,7 @@ func (c *Client) readPump() {
 
 		c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		if c.pongCount%10 == 2 {
-			log.Debug().Float64("curlag-ms", float64(curlag)/float64(time.Millisecond)).
+			log.Info().Float64("curlag-ms", float64(curlag)/float64(time.Millisecond)).
 				Float64("avglag-ms", float64(c.avglag)/float64(time.Millisecond)).
 				Str("username", c.username).
 				Int("pong-count", c.pongCount).
