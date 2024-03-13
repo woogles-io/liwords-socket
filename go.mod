@@ -11,7 +11,7 @@ require (
 	github.com/namsral/flag v1.7.4-pre
 	github.com/nats-io/nats.go v1.31.0
 	github.com/rs/zerolog v1.31.0
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
