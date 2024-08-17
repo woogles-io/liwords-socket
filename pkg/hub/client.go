@@ -15,8 +15,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/domino14/liwords/pkg/entity"
-	pb "github.com/domino14/liwords/rpc/api/proto/ipc"
+	"github.com/woogles-io/liwords/pkg/entity"
+	pb "github.com/woogles-io/liwords/rpc/api/proto/ipc"
 )
 
 var AllowedOrigins = []string{}
