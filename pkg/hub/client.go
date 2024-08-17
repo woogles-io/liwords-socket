@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	// "github.com/domino14/liwords/pkg/entity"
+	// "github.com/woogles-io/liwords/pkg/entity"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"

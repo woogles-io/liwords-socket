@@ -14,7 +14,7 @@ import (
 
 	pb "github.com/domino14/liwords/rpc/api/proto/ipc"
 
-	"github.com/domino14/liwords-socket/pkg/config"
+	"github.com/woogles-io/liwords-socket/pkg/config"
 )
 
 // A Realm is basically a set of clients. It can be thought of as a game room,

@@ -15,8 +15,8 @@ jobs:
       - run: >
           docker build --build-arg BUILD_HASH=${CIRCLE_SHA1}
           --build-arg BUILD_DATE=$(date -Iseconds -u)
-          -t ghcr.io/domino14/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM} .
-      - run: docker push ghcr.io/domino14/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}
+          -t ghcr.io/woogles-io/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM} .
+      - run: docker push ghcr.io/woogles-io/liwords-socket:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}
       - discord/status: &discord-webhook-setting
           webhook: "${DISCORD_WEBHOOK}"
           success_message: ":tada: A $CIRCLE_JOB job has succeeded! (Branch: $CIRCLE_BRANCH)"

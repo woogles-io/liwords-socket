@@ -1,4 +1,4 @@
-module github.com/domino14/liwords-socket
+module github.com/woogles-io/liwords-socket
 
 go 1.21
 
