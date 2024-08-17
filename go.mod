@@ -6,7 +6,6 @@ toolchain go1.23.0
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/domino14/liwords v0.1.3
 	github.com/gorilla/websocket v1.5.3
 	github.com/namsral/flag v1.7.4-pre
 	github.com/nats-io/nats.go v1.37.0
@@ -40,7 +39,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.26.0 // indirect
 	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
