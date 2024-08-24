@@ -3,7 +3,7 @@ module github.com/woogles-io/liwords-socket
 go 1.23.0
 
 require (
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/namsral/flag v1.7.4-pre
 	github.com/nats-io/nats.go v1.37.0
