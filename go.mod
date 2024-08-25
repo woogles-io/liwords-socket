@@ -8,19 +8,19 @@ require (
 	github.com/namsral/flag v1.7.4-pre
 	github.com/nats-io/nats.go v1.37.0
 	github.com/rs/zerolog v1.33.0
-	github.com/woogles-io/liwords v0.2.0
+	github.com/woogles-io/liwords v0.2.1
 	google.golang.org/protobuf v1.34.2
 )
 
 require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
-	github.com/domino14/macondo v0.9.7 // indirect
+	github.com/domino14/macondo v0.9.8 // indirect
 	github.com/domino14/word-golib v0.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
-	github.com/lithammer/shortuuid v3.0.0+incompatible // indirect
+	github.com/lithammer/shortuuid/v4 v4.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
