@@ -42,6 +42,7 @@ jobs:
           docker build --build-arg BUILD_HASH=${GITHUB_SHA}
           --build-arg BUILD_DATE=$(date -Iseconds -u)
           -t ghcr.io/woogles-io/liwords-socket:${GITHUB_REF_NAME}-gh${GITHUB_RUN_NUMBER}
+          .
 
       - name: Push Docker Image to registry
         run: docker push ghcr.io/woogles-io/liwords-socket:${GITHUB_REF_NAME}-gh${GITHUB_RUN_NUMBER}
