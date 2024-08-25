@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 
-	pb "github.com/domino14/liwords/rpc/api/proto/ipc"
+	pb "github.com/woogles-io/liwords/rpc/api/proto/ipc"
 
-	"github.com/domino14/liwords-socket/pkg/config"
+	"github.com/woogles-io/liwords-socket/pkg/config"
 )
 
 // A Realm is basically a set of clients. It can be thought of as a game room,

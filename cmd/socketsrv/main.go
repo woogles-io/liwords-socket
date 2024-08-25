@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/domino14/liwords-socket/pkg/config"
-	sockets "github.com/domino14/liwords-socket/pkg/hub"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/woogles-io/liwords-socket/pkg/config"
+	sockets "github.com/woogles-io/liwords-socket/pkg/hub"
 )
 
 const (
