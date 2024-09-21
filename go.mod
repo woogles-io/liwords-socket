@@ -1,6 +1,6 @@
 module github.com/woogles-io/liwords-socket
 
-go 1.23.0
+go 1.23.1
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
@@ -8,7 +8,7 @@ require (
 	github.com/namsral/flag v1.7.4-pre
 	github.com/nats-io/nats.go v1.37.0
 	github.com/rs/zerolog v1.33.0
-	github.com/woogles-io/liwords v0.2.1
+	github.com/woogles-io/liwords v0.3.0
 	google.golang.org/protobuf v1.34.2
 )
 
@@ -38,10 +38,10 @@ require (
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
-	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
