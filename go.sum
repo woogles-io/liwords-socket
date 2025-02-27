@@ -2,10 +2,10 @@ github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSV
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/domino14/macondo v0.10.2 h1:7wbn0c+oldAXZUocprd64jJmeClg46X7XFPIZNnBrUg=
-github.com/domino14/macondo v0.10.2/go.mod h1:rbFKw9fRMrF8VifH9nhLKXgzG5FAie/4fQ0SRu+qB8Q=
-github.com/domino14/word-golib v0.2.5 h1:BiZPlRmzpJMFLgMcsesr5A1q+CZ8DEsYBJ8l/mYVL94=
-github.com/domino14/word-golib v0.2.5/go.mod h1:p3J+APKtDktBo6LuytRg6t5+zuwyQTfYBhI5MrqmjbQ=
+github.com/domino14/macondo v0.10.3 h1:m9oIkAoaUimFioBMxVi5yuB+UXKZE7TQtETjxHvDghY=
+github.com/domino14/macondo v0.10.3/go.mod h1:akQi97YWzfSnsYp6UJfUb3PcefTiFFS1M4fiLhXWcnc=
+github.com/domino14/word-golib v0.2.6 h1:rUFr6ygyooIohqLhUB9HNi/0vQAKfyAAWHd7evzkYoE=
+github.com/domino14/word-golib v0.2.6/go.mod h1:jMCDzZSsxBZMa3JB/FwiZCXXCv52S2X6dL5UinW8V1I=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.8.0 h1:dAwr6QBTBZIkG8roQaJjGof0pp0EeF+tNV7YBP3F/8M=
@@ -86,8 +86,8 @@ github.com/woogles-io/liwords v0.3.0 h1:TsrfPiZj+gIcB4Pl1Z3iBCJrBglxPcpAEYXfzShN
 github.com/woogles-io/liwords v0.3.0/go.mod h1:fULSOy7e3xsaMSHnBF/amq7UggtovjDxi9M7P5drJfo=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
-golang.org/x/crypto v0.33.0 h1:IOBPskki6Lysi0lo9qQvbxiQ+FvsCC/YWOecCHAixus=
-golang.org/x/crypto v0.33.0/go.mod h1:bVdXmD7IV/4GdElGPozy6U7lWdRXA4qyRVGJV57uQ5M=
+golang.org/x/crypto v0.35.0 h1:b15kiHdrGCHrP6LvwaQ3c03kgNhhiMgvlhxHQhmg2Xs=
+golang.org/x/crypto v0.35.0/go.mod h1:dy7dXNW32cAb/6/PRuTNsix8T+vJAqvuIy5Bli/x0YQ=
 golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa h1:t2QcU6V556bFjYgu4L6C+6VrCPyJZ+eyRsABUPs1mz4=
 golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa/go.mod h1:BHOTPb3L19zxehTsLoJXVaTktb06DFgmdW6Wb9s8jqk=
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
