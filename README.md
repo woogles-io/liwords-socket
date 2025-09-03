@@ -1,4 +1,5 @@
-# liwords-socket
-The websocket server for liwords
+# Important note:
 
-See the README at https://github.com/woogles-io/liwords for more info about how this works.
+  The code in this repo is now part of the https://github.com/woogles-io/liwords repo, under services/socketsrv.
+
+This repo is now archived.
